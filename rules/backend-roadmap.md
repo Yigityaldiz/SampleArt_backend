@@ -53,7 +53,7 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 - [x] Zod şemalarını tanımla (`schemas.ts`)
 - [x] Service katmanını yaz ve repository API'sini uyarl
 - [x] Controller + router oluştur (`GET/POST/PATCH /users`)
-- [ ] Service ve controller testlerini yaz
+- [x] Service ve controller testlerini yaz
 
 **Samples Modülü**
 
@@ -61,7 +61,7 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 - [x] Sample servis + repository akışını tamamla (CRUD, soft delete)
 - [x] Sample image yükleme/metadata servislerini uygula
 - [x] Controller + router oluştur (`GET/POST/PATCH/DELETE /samples`)
-- [ ] Modül testlerini yaz (service + controller)
+- [x] Modül testlerini yaz (service + controller)
 
 **Collections Modülü**
 
