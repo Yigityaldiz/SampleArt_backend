@@ -9,6 +9,7 @@ import { errorHandler } from './middlewares/error-handler';
 import { healthRouter } from './modules/health';
 import { usersRouter } from './modules/users';
 import { samplesRouter } from './modules/samples';
+import { collectionsRouter } from './modules/collections';
 import { logger } from './lib/logger';
 import { env } from './config';
 import { clerkAuthMiddleware, mockAuthMiddleware } from './modules/auth';
@@ -51,6 +52,7 @@ export const createApp = () => {
   app.use('/health', healthRouter);
   app.use('/users', usersRouter);
   app.use('/samples', samplesRouter);
+  app.use('/collections', collectionsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

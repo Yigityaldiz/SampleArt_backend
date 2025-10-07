@@ -65,10 +65,10 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 
 **Collections Modülü**
 
-- [ ] Collections API tasarımını tamamla (CRUD + listeleme)
-- [ ] Koleksiyona sample eklerken `CollectionSample.position` değerini üret
-- [ ] Drag-and-drop / yeniden sıralama durumlarında position normalizasyonu stratejisi oluştur
-- [ ] Koleksiyon ↔ sample ilişkileri için testleri yaz
+- [x] Collections API tasarımını tamamla (CRUD + listeleme)
+- [x] Koleksiyona sample eklerken `CollectionSample.position` değerini üret
+- [x] Drag-and-drop / yeniden sıralama durumlarında position normalizasyonu stratejisi oluştur
+- [x] Koleksiyon ↔ sample ilişkileri için testleri yaz
 
 ## Phase 4 – Yerel Geliştirme Destekleri
 
