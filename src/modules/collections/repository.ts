@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 
 const sampleSelect = {
@@ -28,10 +28,13 @@ export type CollectionWithRelations = Prisma.CollectionGetPayload<{
   include: typeof defaultInclude;
 }>;
 
+type CollectionCreateData = Prisma.CollectionUncheckedCreateInput;
+type CollectionUpdateData = Prisma.CollectionUpdateInput;
+
 export class CollectionRepository {
   constructor(private readonly db: PrismaClient = prisma) {}
 
-  list(params: { userId?: string; skip?: number; take?: number } = {}) {
+  list(params: { userId?: string; skip?: number; take?: number } = {}): Promise<CollectionWithRelations[]> {
     const { userId, skip = 0, take = 25 } = params;
 
     return this.db.collection.findMany({
@@ -45,18 +48,18 @@ export class CollectionRepository {
     });
   }
 
-  findById(id: string) {
+  findById(id: string): Promise<CollectionWithRelations | null> {
     return this.db.collection.findUnique({
       where: { id },
       include: defaultInclude,
     });
   }
 
-  create(data: Prisma.CollectionUncheckedCreateInput) {
+  create(data: CollectionCreateData): Promise<CollectionWithRelations> {
     return this.db.collection.create({ data, include: defaultInclude });
   }
 
-  update(id: string, data: Prisma.CollectionUpdateInput) {
+  update(id: string, data: CollectionUpdateData): Promise<CollectionWithRelations> {
     return this.db.collection.update({ where: { id }, data, include: defaultInclude });
   }
 
@@ -142,3 +145,4 @@ export class CollectionRepository {
 }
 
 export const collectionInclude = defaultInclude;
+export type { CollectionCreateData, CollectionUpdateData };

@@ -1,12 +1,22 @@
 import { Prisma } from '@prisma/client';
 import { HttpError, NotFoundError } from '../../errors';
-import { CollectionRepository, type CollectionWithRelations } from './repository';
+import {
+  CollectionRepository,
+  type CollectionWithRelations,
+  type CollectionCreateData,
+  type CollectionUpdateData,
+} from './repository';
 import type {
   CreateCollectionBody,
   UpdateCollectionBody,
   ListCollectionsQuery,
   ReorderCollectionSamplesBody,
 } from './schemas';
+
+const isPrismaKnownRequestError = (
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError =>
+  error instanceof Prisma.PrismaClientKnownRequestError;
 
 export interface CollectionSampleSummary {
   sampleId: string;
@@ -64,7 +74,7 @@ export class CollectionService {
   async list(params: ListCollectionsQuery = {}): Promise<CollectionResponse[]> {
     const { includeSamples: _includeSamples, ...rest } = params;
     const collections = await this.repo.list(rest);
-    return collections.map((collection: any) => toResponse(collection as CollectionWithRelations));
+    return collections.map((collection) => toResponse(collection));
   }
 
   async getById(id: string): Promise<CollectionResponse> {
@@ -73,20 +83,28 @@ export class CollectionService {
       throw new NotFoundError('Collection not found');
     }
 
-    return toResponse(collection as CollectionWithRelations);
+    return toResponse(collection);
   }
 
   async create(data: CreateCollectionBody & { userId: string }): Promise<CollectionResponse> {
-    const created = await this.repo.create({ userId: data.userId, name: data.name });
+    const payload: CollectionCreateData = {
+      userId: data.userId,
+      name: data.name,
+    };
+
+    const created = await this.repo.create(payload);
     return toResponse(created);
   }
 
   async update(id: string, data: UpdateCollectionBody): Promise<CollectionResponse> {
     try {
-      const updated = await this.repo.update(id, data as Prisma.CollectionUpdateInput);
+      const payload: CollectionUpdateData = {
+        ...data,
+      };
+      const updated = await this.repo.update(id, payload);
       return toResponse(updated);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+    } catch (error: unknown) {
+      if (isPrismaKnownRequestError(error) && error.code === 'P2025') {
         throw new NotFoundError('Collection not found');
       }
       throw error;
@@ -96,8 +114,8 @@ export class CollectionService {
   async delete(id: string): Promise<void> {
     try {
       await this.repo.delete(id);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+    } catch (error: unknown) {
+      if (isPrismaKnownRequestError(error) && error.code === 'P2025') {
         throw new NotFoundError('Collection not found');
       }
       throw error;
@@ -142,7 +160,7 @@ export class CollectionService {
       throw new NotFoundError('Collection not found');
     }
 
-    const existing = collection.samples.find((item) => item.sampleId === sampleId);
+    const existing = collection.samples.find((item : any ) => item.sampleId === sampleId);
     if (!existing) {
       throw new NotFoundError('Sample is not attached to the collection');
     }
@@ -162,7 +180,7 @@ export class CollectionService {
       throw new NotFoundError('Collection not found');
     }
 
-    const existingIds = new Set(collection.samples.map((item) => item.sampleId));
+    const existingIds = new Set(collection.samples.map((item: any) => item.sampleId));
 
     const uniqueProvided = new Set(body.sampleIds);
     if (uniqueProvided.size !== body.sampleIds.length) {
@@ -176,8 +194,8 @@ export class CollectionService {
     }
 
     const remaining = collection.samples
-      .map((item) => item.sampleId)
-      .filter((sampleId) => !uniqueProvided.has(sampleId));
+      .map((item: any) => item.sampleId)
+      .filter((sampleId: any) => !uniqueProvided.has(sampleId));
 
     const ordered = [...body.sampleIds, ...remaining];
 
