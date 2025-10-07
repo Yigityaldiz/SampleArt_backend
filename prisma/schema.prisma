@@ -1,0 +1,121 @@
+// SAMPLE ART — Final schema.prisma
+// PostgreSQL (local → AWS S3 uyumlu)
+// Clerk + Prisma backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// PostgreSQL extension requirement for citext (applied via migration):
+///   CREATE EXTENSION IF NOT EXISTS citext;
+
+//////////////////////////////////////////////////////////
+// USERS (Clerk)
+//////////////////////////////////////////////////////////
+model User {
+  id         String      @id                     // Clerk user_id (ör. user_abc123)
+  email      String?     @unique @db.Citext      // Case-insensitive, unique email
+  name       String?
+  locale     String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  samples     Sample[]
+  collections Collection[]
+
+  @@map("users")
+}
+
+//////////////////////////////////////////////////////////
+// COLLECTIONS
+//////////////////////////////////////////////////////////
+model Collection {
+  id         String      @id @default(cuid())
+  userId     String
+  name       String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  samples CollectionSample[]
+
+  @@unique([userId, name])
+  @@index([userId, updatedAt])
+  @@map("collections")
+}
+
+//////////////////////////////////////////////////////////
+// SAMPLES
+//////////////////////////////////////////////////////////
+model Sample {
+  id               String       @id @default(cuid())
+  userId           String
+  title            String
+  materialType     String
+  applicationArea  String?
+  surface          String?
+  colorHex         String?      @db.Char(7)
+  colorName        String?
+  companyName      String?
+  priceMinor       Int?
+  priceCurrency    String?      @db.Char(3)       // TRY, USD, EUR — backend validation
+  quantityValue    Decimal?     @db.Decimal(10, 2)
+  quantityUnit     String?                        // sqm, m, piece — backend validation
+  sizeText         String?
+  locationLat      Decimal?     @db.Decimal(9, 6)
+  locationLng      Decimal?     @db.Decimal(9, 6)
+  notes            String?
+  isDeleted        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  image       SampleImage?
+  collections CollectionSample[]
+
+  @@index([userId, updatedAt])
+  @@index([isDeleted])
+  @@map("samples")
+}
+
+//////////////////////////////////////////////////////////
+// SAMPLE IMAGES (1:1)
+//////////////////////////////////////////////////////////
+model SampleImage {
+  id               String     @id @default(cuid())
+  sampleId         String     @unique
+  storageProvider  String
+  objectKey        String
+  url              String
+  width            Int?
+  height           Int?
+  blurhash         String?
+  exif             Json?
+  createdAt        DateTime   @default(now())
+
+  sample Sample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("sample_images")
+}
+
+//////////////////////////////////////////////////////////
+// COLLECTION ↔ SAMPLES (N:N)
+//////////////////////////////////////////////////////////
+model CollectionSample {
+  collectionId String
+  sampleId     String
+  position     Int
+  addedAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sample     Sample     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, sampleId])
+  @@index([collectionId, position])
+  @@map("collection_samples")
+}

@@ -1,0 +1,53 @@
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
+import { z } from 'zod';
+
+const cwd = process.cwd();
+const explicitEnvFile = process.env.ENV_FILE;
+const candidateFiles = explicitEnvFile ? [explicitEnvFile] : ['.env.local', '.env'];
+
+const resolvedEnvFile = candidateFiles
+  .map((file) => path.resolve(cwd, file))
+  .find((absolutePath) => fs.existsSync(absolutePath));
+
+if (resolvedEnvFile) {
+  dotenv.config({ path: resolvedEnvFile });
+} else {
+  dotenv.config();
+}
+
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DATABASE_URL: z
+    .string()
+    .min(1, 'DATABASE_URL is required')
+    .default('postgresql://sample_art:sample_art@localhost:5432/sample_art?schema=public'),
+  UPLOAD_ROOT: z.string().min(1).default('storage/uploads'),
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default(process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  CLERK_PUBLISHABLE_KEY: z.string().optional(),
+  CLERK_SECRET_KEY: z.string().optional(),
+});
+
+const parsed = EnvSchema.parse({
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
+  DATABASE_URL: process.env.DATABASE_URL,
+  UPLOAD_ROOT: process.env.UPLOAD_ROOT,
+  LOG_LEVEL: process.env.LOG_LEVEL,
+  CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
+  CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+});
+
+export const env = {
+  ...parsed,
+  isProduction: parsed.NODE_ENV === 'production',
+  isDevelopment: parsed.NODE_ENV === 'development',
+  isTest: parsed.NODE_ENV === 'test',
+  loadedEnvFile: resolvedEnvFile,
+};
+
+export type AppEnvironment = typeof env;
