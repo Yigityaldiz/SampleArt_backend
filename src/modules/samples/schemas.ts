@@ -1,9 +1,17 @@
 import { z } from 'zod';
 
-const decimalString = z
-  .string()
-  .regex(/^-?\d+(\.\d+)?$/, 'Must be a numeric string')
-  .transform((value) => value);
+const decimalPattern = /^-?\d+(\.\d+)?$/;
+
+const decimalLike = z
+  .union([
+    z
+      .string()
+      .trim()
+      .min(1, 'Must be a numeric string')
+      .regex(decimalPattern, 'Must be a numeric string'),
+    z.number().refine((value) => Number.isFinite(value), 'Must be a finite number'),
+  ])
+  .transform((value) => (typeof value === 'number' ? value.toString() : value));
 
 export const sampleIdParamSchema = z.object({
   id: z.string().min(1, 'id is required'),
@@ -42,11 +50,11 @@ export const createSampleBodySchema = z.object({
   companyName: z.string().optional(),
   priceMinor: z.number().int().optional(),
   priceCurrency: z.string().length(3).optional(),
-  quantityValue: decimalString.optional(),
+  quantityValue: decimalLike.optional(),
   quantityUnit: z.string().optional(),
   sizeText: z.string().optional(),
-  locationLat: decimalString.optional(),
-  locationLng: decimalString.optional(),
+  locationLat: decimalLike.optional(),
+  locationLng: decimalLike.optional(),
   notes: z.string().optional(),
   image: sampleImageInputSchema.optional(),
 });

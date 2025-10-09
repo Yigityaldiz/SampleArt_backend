@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config';
 
@@ -84,6 +84,12 @@ export interface PresignedPutObject {
   expiresIn: number;
 }
 
+export interface PresignedGetObject {
+  key: string;
+  downloadUrl: string;
+  expiresIn: number;
+}
+
 export const createPutObjectPresign = async (params: {
   userId: string;
   contentType: string;
@@ -109,6 +115,30 @@ export const createPutObjectPresign = async (params: {
     key,
     uploadUrl,
     publicUrl: publicUrlFor(key),
+    expiresIn,
+  };
+};
+
+export const createGetObjectPresign = async (params: {
+  key: string;
+  expiresInSeconds?: number;
+}): Promise<PresignedGetObject> => {
+  if (!env.S3_BUCKET) {
+    throw new Error('S3 bucket is not configured');
+  }
+
+  const { key, expiresInSeconds } = params;
+  const command = new GetObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+  });
+
+  const expiresIn = expiresInSeconds ?? DEFAULT_PRESIGN_EXPIRATION_SECONDS;
+  const downloadUrl = await getSignedUrl(s3Client, command, { expiresIn });
+
+  return {
+    key,
+    downloadUrl,
     expiresIn,
   };
 };
