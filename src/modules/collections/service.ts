@@ -5,6 +5,7 @@ import {
   type CollectionWithRelations,
   type CollectionCreateData,
   type CollectionUpdateData,
+  type CollectionSampleWithRelations,
 } from './repository';
 import type {
   CreateCollectionBody,
@@ -42,7 +43,7 @@ export interface CollectionResponse {
   updatedAt: string;
 }
 
-const mapSample = (item: CollectionWithRelations['samples'][number]): CollectionSampleSummary => ({
+const mapSample = (item: CollectionSampleWithRelations): CollectionSampleSummary => ({
   sampleId: item.sampleId,
   position: item.position,
   addedAt: item.addedAt.toISOString(),
@@ -74,7 +75,7 @@ export class CollectionService {
   async list(params: ListCollectionsQuery = {}): Promise<CollectionResponse[]> {
     const { includeSamples: _includeSamples, ...rest } = params;
     const collections = await this.repo.list(rest);
-    return collections.map((collection) => toResponse(collection));
+    return collections.map(toResponse);
   }
 
   async getById(id: string): Promise<CollectionResponse> {
@@ -135,23 +136,7 @@ export class CollectionService {
 
     const position = await this.repo.getNextSamplePosition(collectionId);
     const created = await this.repo.createCollectionSample(collectionId, sampleId, position);
-
-    return {
-      sampleId: created.sampleId,
-      position: created.position,
-      addedAt: created.addedAt.toISOString(),
-      sample: created.sample
-        ? {
-            id: created.sample.id,
-            userId: created.sample.userId,
-            title: created.sample.title,
-            materialType: created.sample.materialType,
-            isDeleted: created.sample.isDeleted,
-            createdAt: created.sample.createdAt.toISOString(),
-            updatedAt: created.sample.updatedAt.toISOString(),
-          }
-        : undefined,
-    };
+    return mapSample(created);
   }
 
   async removeSample(collectionId: string, sampleId: string): Promise<CollectionResponse> {
@@ -160,7 +145,7 @@ export class CollectionService {
       throw new NotFoundError('Collection not found');
     }
 
-    const existing = collection.samples.find((item : any ) => item.sampleId === sampleId);
+    const existing = collection.samples.find((item) => item.sampleId === sampleId);
     if (!existing) {
       throw new NotFoundError('Sample is not attached to the collection');
     }
@@ -180,7 +165,7 @@ export class CollectionService {
       throw new NotFoundError('Collection not found');
     }
 
-    const existingIds = new Set(collection.samples.map((item: any) => item.sampleId));
+    const existingIds = new Set(collection.samples.map((item) => item.sampleId));
 
     const uniqueProvided = new Set(body.sampleIds);
     if (uniqueProvided.size !== body.sampleIds.length) {
@@ -194,8 +179,8 @@ export class CollectionService {
     }
 
     const remaining = collection.samples
-      .map((item: any) => item.sampleId)
-      .filter((sampleId: any) => !uniqueProvided.has(sampleId));
+      .map((item) => item.sampleId)
+      .filter((sampleId) => !uniqueProvided.has(sampleId));
 
     const ordered = [...body.sampleIds, ...remaining];
 

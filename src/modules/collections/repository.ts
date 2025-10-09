@@ -28,6 +28,14 @@ export type CollectionWithRelations = Prisma.CollectionGetPayload<{
   include: typeof defaultInclude;
 }>;
 
+export type CollectionSampleWithRelations = Prisma.CollectionSampleGetPayload<{
+  include: {
+    sample: {
+      select: typeof sampleSelect;
+    };
+  };
+}>;
+
 type CollectionCreateData = Prisma.CollectionUncheckedCreateInput;
 type CollectionUpdateData = Prisma.CollectionUpdateInput;
 
@@ -63,11 +71,11 @@ export class CollectionRepository {
     return this.db.collection.update({ where: { id }, data, include: defaultInclude });
   }
 
-  delete(id: string) {
-    return this.db.collection.delete({ where: { id } });
+  async delete(id: string): Promise<void> {
+    await this.db.collection.delete({ where: { id } });
   }
 
-  async getNextSamplePosition(collectionId: string) {
+  async getNextSamplePosition(collectionId: string): Promise<number> {
     const result = await this.db.collectionSample.aggregate({
       where: { collectionId },
       _max: {
@@ -78,7 +86,11 @@ export class CollectionRepository {
     return (result._max.position ?? 0) + 1;
   }
 
-  createCollectionSample(collectionId: string, sampleId: string, position: number) {
+  createCollectionSample(
+    collectionId: string,
+    sampleId: string,
+    position: number,
+  ): Promise<CollectionSampleWithRelations> {
     return this.db.collectionSample.create({
       data: {
         collectionId,
@@ -93,8 +105,8 @@ export class CollectionRepository {
     });
   }
 
-  removeCollectionSample(collectionId: string, sampleId: string) {
-    return this.db.collectionSample.delete({
+  async removeCollectionSample(collectionId: string, sampleId: string): Promise<void> {
+    await this.db.collectionSample.delete({
       where: {
         collectionId_sampleId: {
           collectionId,
@@ -107,7 +119,7 @@ export class CollectionRepository {
   async updateSamplePositions(
     collectionId: string,
     items: Array<{ sampleId: string; position: number }>,
-  ) {
+  ): Promise<void> {
     if (items.length === 0) {
       return;
     }
@@ -127,7 +139,10 @@ export class CollectionRepository {
     );
   }
 
-  getCollectionSample(collectionId: string, sampleId: string) {
+  getCollectionSample(
+    collectionId: string,
+    sampleId: string,
+  ): Promise<CollectionSampleWithRelations | null> {
     return this.db.collectionSample.findUnique({
       where: {
         collectionId_sampleId: {

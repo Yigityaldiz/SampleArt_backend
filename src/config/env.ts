@@ -25,6 +25,11 @@ const EnvSchema = z.object({
     .min(1, 'DATABASE_URL is required')
     .default('postgresql://sample_art:sample_art@localhost:5432/sample_art?schema=public'),
   UPLOAD_ROOT: z.string().min(1).default('storage/uploads'),
+  AWS_REGION: z.string().min(1).default('eu-central-1'),
+  S3_BUCKET: z.string().min(1).optional(),
+  AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  CDN_BASE_URL: z.string().url().optional(),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default(process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
@@ -37,6 +42,11 @@ const parsed = EnvSchema.parse({
   PORT: process.env.PORT,
   DATABASE_URL: process.env.DATABASE_URL,
   UPLOAD_ROOT: process.env.UPLOAD_ROOT,
+  AWS_REGION: process.env.AWS_REGION,
+  S3_BUCKET: process.env.S3_BUCKET,
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  CDN_BASE_URL: process.env.CDN_BASE_URL,
   LOG_LEVEL: process.env.LOG_LEVEL,
   CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,

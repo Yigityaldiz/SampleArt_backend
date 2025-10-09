@@ -1,29 +1,46 @@
 import type { RequestHandler } from 'express';
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../auth';
-import { listUsers, getUser, createUser, updateUser } from './controller';
+import { requireAuth } from '../auth';
+import { listUsers, getUser, createUser, updateUser, getCurrentUser } from './controller';
 
-const allowSelfOrAdmin: RequestHandler = (req, res, next) => {
+const ensureSelf: RequestHandler = (req, res, next) => {
   const user = req.authUser;
 
   if (!user) {
     return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
 
-  if (user.roles.includes('admin') || user.id === req.params.id) {
+  if (user.id === req.params.id) {
     return next();
   }
 
   return res.status(403).json({ error: { message: 'Forbidden' } });
 };
 
+const ensureBodyMatchesSelf: RequestHandler = (req, res, next) => {
+  const user = req.authUser;
+
+  if (!user) {
+    return res.status(401).json({ error: { message: 'Unauthorized' } });
+  }
+
+  const { id } = (req.body ?? {}) as { id?: string };
+
+  if (id && id !== user.id) {
+    return res.status(403).json({ error: { message: 'Forbidden' } });
+  }
+
+  return next();
+};
+
 const router = Router();
 
 router.use(requireAuth);
 
-router.get('/', requireRole('admin'), listUsers);
-router.get('/:id', allowSelfOrAdmin, getUser);
-router.post('/', requireRole('admin'), createUser);
-router.patch('/:id', requireRole('admin'), updateUser);
+router.get('/', listUsers);
+router.get('/me', getCurrentUser);
+router.get('/:id', ensureSelf, getUser);
+router.post('/', ensureBodyMatchesSelf, createUser);
+router.patch('/:id', ensureSelf, updateUser);
 
 export const usersRouter = router;

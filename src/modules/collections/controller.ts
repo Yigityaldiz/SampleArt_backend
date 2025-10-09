@@ -21,7 +21,7 @@ const ensureAuthorized = (
     return { allowed: false, reason: 'unauthorized' };
   }
 
-  if (authUser.roles.includes('admin') || authUser.id === ownerId) {
+  if (authUser.id === ownerId) {
     return { allowed: true };
   }
 
@@ -37,14 +37,10 @@ export const listCollections = async (req: Request, res: Response, next: NextFun
       return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    let finalQuery = query;
-
-    if (!authUser.roles.includes('admin')) {
-      finalQuery = {
-        ...query,
-        userId: authUser.id,
-      };
-    }
+    const finalQuery = {
+      ...query,
+      userId: authUser.id,
+    };
 
     const collections = await service.list({ ...finalQuery, includeSamples: true });
     res.json({ data: collections });
@@ -81,13 +77,11 @@ export const createCollection = async (req: Request, res: Response, next: NextFu
       return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    const targetUserId = authUser.roles.includes('admin') ? body.userId ?? authUser.id : authUser.id;
-
-    if (!authUser.roles.includes('admin') && body.userId && body.userId !== authUser.id) {
+    if (body.userId && body.userId !== authUser.id) {
       return res.status(403).json({ error: { message: 'Forbidden' } });
     }
 
-    const created = await service.create({ name: body.name, userId: targetUserId });
+    const created = await service.create({ name: body.name, userId: authUser.id });
     res.status(201).json({ data: created });
   } catch (error) {
     next(error);

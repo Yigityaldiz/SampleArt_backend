@@ -12,7 +12,9 @@ vi.mock('./service', () => ({
   UserService: vi.fn().mockImplementation(() => serviceMocks),
 }));
 
-import { listUsers, getUser, createUser, updateUser } from './controller';
+import { listUsers, getUser, createUser, updateUser, getCurrentUser } from './controller';
+import type { AuthUser } from '../auth';
+import { NotFoundError } from '../../errors';
 
 const createResponse = () => {
   const res: Partial<Response> = {};
@@ -21,13 +23,40 @@ const createResponse = () => {
   return res as Response;
 };
 
+const createAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
+  id: 'user_1',
+  roles: ['user'],
+  ...overrides,
+});
+
 describe('Users controller', () => {
   beforeEach(() => {
     Object.values(serviceMocks).forEach((mock) => mock.mockReset());
   });
 
-  it('returns paginated list', async () => {
-    const req = { query: { take: '5' } } as unknown as Request;
+  it('returns only authenticated user when not admin', async () => {
+    const req = {
+      query: { take: '5' },
+      authUser: createAuthUser(),
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
+
+    await listUsers(req, res, next);
+
+    expect(serviceMocks.list).not.toHaveBeenCalled();
+    expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
+    expect(res.json).toHaveBeenCalledWith({ data: [{ id: 'user_1' }] });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('returns paginated list for admin users', async () => {
+    const req = {
+      query: { take: '5' },
+      authUser: createAuthUser({ roles: ['admin'] }),
+    } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
 
@@ -41,7 +70,10 @@ describe('Users controller', () => {
   });
 
   it('gets user by id', async () => {
-    const req = { params: { id: 'user_1' } } as unknown as Request;
+    const req = {
+      params: { id: 'user_1' },
+      authUser: createAuthUser(),
+    } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
     serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
@@ -61,6 +93,7 @@ describe('Users controller', () => {
         name: 'Foo',
         locale: 'en-US',
       },
+      authUser: createAuthUser(),
     } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
@@ -79,7 +112,11 @@ describe('Users controller', () => {
   });
 
   it('calls next when service throws', async () => {
-    const req = { params: { id: 'user_1' }, body: { email: 'foo@example.com' } } as unknown as Request;
+    const req = {
+      params: { id: 'user_1' },
+      body: { email: 'foo@example.com' },
+      authUser: createAuthUser(),
+    } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
     const error = new Error('boom');
@@ -88,5 +125,61 @@ describe('Users controller', () => {
     await updateUser(req, res, next);
 
     expect(next).toHaveBeenCalledWith(error);
+  });
+
+  it('forbids accessing other users', async () => {
+    const req = {
+      params: { id: 'user_2' },
+      authUser: createAuthUser(),
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    await getUser(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: { message: 'Forbidden' } });
+    expect(serviceMocks.getById).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('returns current user when record exists', async () => {
+    const req = {
+      authUser: createAuthUser(),
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
+
+    await getCurrentUser(req, res, next);
+
+    expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
+    expect(serviceMocks.create).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('lazily creates current user when missing', async () => {
+    const req = {
+      authUser: createAuthUser({ id: 'user_missing', roles: ['user'], name: 'Missing' }),
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.getById.mockRejectedValue(new NotFoundError('User not found'));
+    serviceMocks.create.mockResolvedValue({ id: 'user_missing' });
+
+    await getCurrentUser(req, res, next);
+
+    expect(serviceMocks.getById).toHaveBeenCalledWith('user_missing');
+    expect(serviceMocks.create).toHaveBeenCalledWith({
+      id: 'user_missing',
+      email: undefined,
+      name: 'Missing',
+      locale: undefined,
+    });
+    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_missing' } });
+    expect(next).not.toHaveBeenCalled();
   });
 });

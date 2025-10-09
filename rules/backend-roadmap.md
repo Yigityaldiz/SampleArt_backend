@@ -85,7 +85,67 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 - [ ] Kod örtüşme hedefleri belirle (%80+)
 - [ ] GitHub Actions pipeline taslağını yaz (lint + test + prisma validate)
 
-## Phase 6 – Üretim Hazırlığı (Sonra)
+## Phase 6 – S3 Entegrasyonu (Uploads)
+
+**6.1 Altyapı & IAM**
+
+- [ ] S3 bucket oluştur: `sample-art-uploads-<env>` (region: `eu-central-1`, SSE-S3 açık, public access kapalı)
+- [ ] Minimum izinli IAM policy tanımla (`s3:PutObject`, `s3:GetObject`) → `arn:aws:s3:::sample-art-uploads-*/samples/*`
+- [ ] (Opsiyonel) CloudFront dağıtımı oluştur ve `CDN_BASE_URL` değerini kaydet
+
+**6.2 Konfigürasyon**
+
+- [ ] `.env.local` içine AWS kimlik bilgilerini ekle (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET`, ops: `CDN_BASE_URL`)
+- [x] `src/config/env.ts` şemasına yeni alanları ekle (opsiyonel `CDN_BASE_URL` dahil)
+- [ ] Prod gizli anahtarlarını Secret Manager veya GitHub Secrets’a taşı
+
+**6.3 Bağımlılıklar**
+
+- [x] `pnpm add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner`
+
+**6.4 S3 Kütüphanesi**
+
+- [x] `src/lib/s3.ts` dosyasını oluştur ve `S3Client` + yardımcıları (`buildObjectKey`, `createPutObjectPresign`, `publicUrlFor`) ekle
+
+**6.5 Uploads Router (Pre-signed URL)**
+
+- [x] `src/modules/uploads` modülünü oluştur
+- [x] `POST /uploads/presign` endpoint’ini yaz (body: `{ contentType, extension? }`, `requireAuth` koruması)
+- [x] `createPutObjectPresign` çağrısı ile `{ uploadUrl, key, publicUrl }` döndür
+- [x] `src/app.ts` içinde `uploadsRouter`’ı mount et
+
+**6.6 Samples ile Entegrasyon**
+
+- [ ] README / API dokümantasyonuna iOS akışı ekle:
+  1. `POST /uploads/presign` → dönen URL ile PUT yükleme
+  2. `POST /samples` isteğinde `image` alanını `{ "storageProvider": "s3", "objectKey": key, "url": publicUrl, ... }` olarak gönder
+- [ ] Şemanın `storageProvider` alanının `"s3"` değerini kabul ettiğini not et (şu an zaten generic)
+
+**6.7 (Opsiyonel) İmzalı GET URL**
+
+- [ ] `GET /uploads/sign-get?key=<objectKey>` endpoint’i ekle (5 dk geçerli imzalı URL döndür)
+- [ ] Private içerik senaryosu için iOS dokümantasyonuna alternatif akışı ekle
+
+**6.8 Güvenlik & Doğrulamalar**
+
+- [ ] `POST /uploads/presign` girişinde `contentType` beyaz liste kontrolü (`image/*`)
+- [ ] (Opsiyonel) Maksimum dosya boyutu (örn. 10 MB) için doğrulamalar ve iOS sıkıştırma rehberi yaz
+- [ ] Pino log’larına `userId` ve `objectKey` bağlamını ekle
+
+**6.9 Test & Doğrulama (Yerel)**
+
+- [ ] Postman ile `POST /uploads/presign` çağrısı yap ve `uploadUrl` döndüğünü doğrula
+- [ ] `curl -X PUT` ile test görselini yükle → 200 bekle
+- [ ] `POST /samples` ile kayıt oluştur; veritabanında `sample_images` satırını kontrol et
+- [ ] (Varsa) `GET /uploads/sign-get` ile imzalı URL üretip görüntüle
+- [ ] Hata senaryoları: yanlış `contentType`, eksik auth, bucket/region uyuşmazlığı
+
+**6.10 Geliştirici Dokümantasyonu**
+
+- [ ] `README.md` içine “Uploads (S3)” bölümü ekle (akış diyagramı + örnek istek/yanıt)
+- [ ] iOS entegrasyon snippet’i paylaş (PUT upload örneği, `Content-Type` başlıkları)
+
+## Phase 7 – Üretim Hazırlığı (Sonra)
 
 - [ ] Legacy Project/Artwork/Material domainini Collections/Samples entegrasyonuna göre yeniden tasarla
 - [ ] S3 adapter'ını yaz ve yerel adapter ile soyutlama katmanında birleştir
