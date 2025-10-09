@@ -1,4 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
+import { NotFoundError } from '../../errors';
+import { UserService } from '../users/service';
+import type { AuthUser } from '../auth';
 import { SampleService } from './service';
 import {
   createSampleBodySchema,
@@ -8,6 +11,26 @@ import {
 } from './schemas';
 
 const service = new SampleService();
+const userService = new UserService();
+
+const toNullable = <T>(value: T | null | undefined) => (value === undefined ? undefined : value);
+
+const ensureUserRecord = async (authUser: AuthUser) => {
+  try {
+    return await userService.getById(authUser.id);
+  } catch (error) {
+    if (!(error instanceof NotFoundError)) {
+      throw error;
+    }
+
+    return userService.create({
+      id: authUser.id,
+      email: toNullable(authUser.email),
+      name: toNullable(authUser.name),
+      locale: toNullable(authUser.locale),
+    });
+  }
+};
 
 export const listSamples = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -54,10 +77,26 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
       return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
+    await ensureUserRecord(authUser);
+
     const targetUserId = body.userId ?? authUser.id;
 
     if (!authUser.roles.includes('admin') && targetUserId !== authUser.id) {
       return res.status(403).json({ error: { message: 'Forbidden' } });
+    }
+
+    if (targetUserId !== authUser.id) {
+      const targetUser = await userService.getById(targetUserId).catch((error) => {
+        if (error instanceof NotFoundError) {
+          return null;
+        }
+
+        throw error;
+      });
+
+      if (!targetUser) {
+        return res.status(400).json({ error: { message: 'Target user not found' } });
+      }
     }
 
     const sample = await service.create({ ...body, userId: targetUserId });
