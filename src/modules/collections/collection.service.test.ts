@@ -43,11 +43,17 @@ describe('CollectionService', () => {
     updateSamplePositions: vi.fn(),
   };
 
-  const service = new CollectionService(repo as any);
+  const sampleRepo = {
+    findById: vi.fn(),
+  };
+
+  let service: CollectionService;
 
   beforeEach(() => {
     vi.resetAllMocks();
     Object.values(repo).forEach((mock) => (mock as any).mockReset?.());
+    (sampleRepo.findById as any).mockReset?.();
+    service = new CollectionService(repo as any, sampleRepo as any);
   });
 
   it('lists collections and maps samples', async () => {
@@ -87,11 +93,16 @@ describe('CollectionService', () => {
     (repo.getCollectionSample as any).mockResolvedValue(sampleSummary);
 
     await expect(service.addSample('col_1', 'sample_1')).rejects.toBeInstanceOf(HttpError);
+    expect(sampleRepo.findById).not.toHaveBeenCalled();
   });
 
   it('adds sample with next position', async () => {
     (repo.findById as any).mockResolvedValue(collectionWithRelations);
     (repo.getCollectionSample as any).mockResolvedValue(null);
+    (sampleRepo.findById as any).mockResolvedValue({
+      id: 'sample_2',
+      userId: 'user_1',
+    });
     (repo.getNextSamplePosition as any).mockResolvedValue(2);
     (repo.createCollectionSample as any).mockResolvedValue({
       collectionId: 'col_1',
@@ -103,8 +114,22 @@ describe('CollectionService', () => {
 
     const created = await service.addSample('col_1', 'sample_2');
 
+    expect(sampleRepo.findById).toHaveBeenCalledWith('sample_2');
     expect(repo.createCollectionSample).toHaveBeenCalledWith('col_1', 'sample_2', 2);
     expect(created.position).toBe(2);
+  });
+
+  it('throws when sample belongs to another user', async () => {
+    (repo.findById as any).mockResolvedValue(collectionWithRelations);
+    (repo.getCollectionSample as any).mockResolvedValue(null);
+    (sampleRepo.findById as any).mockResolvedValue({
+      id: 'sample_2',
+      userId: 'other_user',
+    });
+
+    await expect(service.addSample('col_1', 'sample_2')).rejects.toMatchObject({
+      statusCode: 403,
+    });
   });
 
   it('reorders collection samples and normalizes missing ones', async () => {

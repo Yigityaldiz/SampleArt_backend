@@ -13,6 +13,7 @@ import type {
   ListCollectionsQuery,
   ReorderCollectionSamplesBody,
 } from './schemas';
+import { SampleRepository } from '../samples/repository';
 
 const isPrismaKnownRequestError = (
   error: unknown,
@@ -70,7 +71,10 @@ const toResponse = (collection: CollectionWithRelations): CollectionResponse => 
 });
 
 export class CollectionService {
-  constructor(private readonly repo = new CollectionRepository()) {}
+  constructor(
+    private readonly repo = new CollectionRepository(),
+    private readonly sampleRepo = new SampleRepository(),
+  ) {}
 
   async list(params: ListCollectionsQuery = {}): Promise<CollectionResponse[]> {
     const { includeSamples: _includeSamples, ...rest } = params;
@@ -132,6 +136,15 @@ export class CollectionService {
     const existing = await this.repo.getCollectionSample(collectionId, sampleId);
     if (existing) {
       throw new HttpError(409, 'Sample already exists in collection');
+    }
+
+    const sample = await this.sampleRepo.findById(sampleId);
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    if (sample.userId !== collection.userId) {
+      throw new HttpError(403, 'Sample belongs to another user');
     }
 
     const position = await this.repo.getNextSamplePosition(collectionId);
