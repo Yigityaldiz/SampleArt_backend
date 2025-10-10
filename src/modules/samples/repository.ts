@@ -12,18 +12,40 @@ const defaultInclude = {
 export class SampleRepository {
   constructor(private readonly db: PrismaClient = prisma) {}
 
-  findById(id: string) {
-    return this.db.sample.findUnique({ where: { id }, include: defaultInclude });
+  findById(
+    id: string,
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<SampleWithRelations | null> {
+    const { includeDeleted = false } = options;
+
+    return this.db.sample.findFirst({
+      where: {
+        id,
+        ...(includeDeleted
+          ? {}
+          : {
+              isDeleted: false,
+              deletedAt: null,
+            }),
+      },
+      include: defaultInclude,
+    });
   }
 
   list(params: { userId?: string; skip?: number; take?: number; includeDeleted?: boolean } = {}) {
     const { userId, skip = 0, take = 25, includeDeleted = false } = params;
 
+    const where: Prisma.SampleWhereInput = {
+      userId,
+    };
+
+    if (!includeDeleted) {
+      where.isDeleted = false;
+      where.deletedAt = null;
+    }
+
     return this.db.sample.findMany({
-      where: {
-        userId,
-        ...(includeDeleted ? {} : { isDeleted: false }),
-      },
+      where,
       skip,
       take,
       orderBy: { updatedAt: 'desc' },
@@ -39,11 +61,30 @@ export class SampleRepository {
     return this.db.sample.update({ where: { id }, data, include: defaultInclude });
   }
 
-  softDelete(id: string) {
+  softDelete(id: string, deletedAt: Date) {
     return this.db.sample.update({
       where: { id },
-      data: { isDeleted: true },
+      data: { isDeleted: true, deletedAt },
       include: defaultInclude,
+    });
+  }
+
+  markImageDeleted(sampleId: string, deletedAt: Date) {
+    return this.db.sampleImage.updateMany({
+      where: { sampleId },
+      data: { deletedAt },
+    });
+  }
+
+  hardDelete(id: string) {
+    return this.db.sample.delete({
+      where: { id },
+    });
+  }
+
+  deleteCollectionLinks(sampleId: string) {
+    return this.db.collectionSample.deleteMany({
+      where: { sampleId },
     });
   }
 }

@@ -13,6 +13,12 @@ const sampleSelect = {
 
 const defaultInclude = {
   samples: {
+    where: {
+      sample: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+    },
     include: {
       sample: {
         select: sampleSelect,
@@ -48,6 +54,8 @@ export class CollectionRepository {
     return this.db.collection.findMany({
       where: {
         userId,
+        isDeleted: false,
+        deletedAt: null,
       },
       include: defaultInclude,
       orderBy: { updatedAt: 'desc' },
@@ -57,8 +65,8 @@ export class CollectionRepository {
   }
 
   findById(id: string): Promise<CollectionWithRelations | null> {
-    return this.db.collection.findUnique({
-      where: { id },
+    return this.db.collection.findFirst({
+      where: { id, isDeleted: false, deletedAt: null },
       include: defaultInclude,
     });
   }

@@ -14,6 +14,11 @@ describe('SampleService', () => {
     create: vi.fn(),
     update: vi.fn(),
     softDelete: vi.fn(),
+    markImageDeleted: vi.fn(),
+  };
+
+  const cleanupTasks = {
+    enqueueSampleCleanup: vi.fn(),
   };
 
   const sampleWithRelations = {
@@ -35,6 +40,7 @@ describe('SampleService', () => {
     locationLng: createDecimal('29.654321'),
     notes: 'Test note',
     isDeleted: false,
+    deletedAt: null,
     image: {
       id: 'img_1',
       sampleId: 'sample_1',
@@ -46,6 +52,7 @@ describe('SampleService', () => {
       blurhash: null,
       exif: { camera: 'nikon' },
       createdAt: date,
+      deletedAt: null,
     },
     collections: [
       {
@@ -59,7 +66,7 @@ describe('SampleService', () => {
     updatedAt: date,
   } as any;
 
-  const service = new SampleService(repo as any);
+  const service = new SampleService(repo as any, cleanupTasks as any);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -155,11 +162,19 @@ describe('SampleService', () => {
 
   it('soft deletes sample', async () => {
     const deletedSample = { ...sampleWithRelations, isDeleted: true };
-    repo.softDelete.mockResolvedValue(deletedSample);
+    repo.findById.mockResolvedValueOnce(sampleWithRelations);
+    repo.softDelete.mockResolvedValue({ ...deletedSample, deletedAt: date });
 
     const result = await service.softDelete('sample_1');
 
-    expect(repo.softDelete).toHaveBeenCalledWith('sample_1');
+    expect(repo.findById).toHaveBeenCalledWith('sample_1', { includeDeleted: true });
+    expect(repo.softDelete).toHaveBeenCalledWith('sample_1', expect.any(Date));
+    expect(repo.markImageDeleted).toHaveBeenCalledWith('sample_1', expect.any(Date));
+    expect(cleanupTasks.enqueueSampleCleanup).toHaveBeenCalledWith({
+      sampleId: 'sample_1',
+      userId: 'user_1',
+      objectKeys: ['sample/object.jpg'],
+    });
     expect(result.isDeleted).toBe(true);
   });
 });

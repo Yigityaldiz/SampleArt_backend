@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { NotFoundError } from '../../errors';
 import { SampleRepository } from './repository';
+import { CleanupTaskService } from '../cleanup';
 import type {
   CreateSampleBody,
   UpdateSampleBody,
@@ -147,16 +148,26 @@ const buildImageMutation = (
 };
 
 export class SampleService {
-  constructor(private readonly repo = new SampleRepository()) {}
+  constructor(
+    private readonly repo = new SampleRepository(),
+    private readonly cleanupTasks = new CleanupTaskService(),
+  ) {}
 
   async list(query: ListSamplesQuery = {}): Promise<SampleResponse[]> {
     const samples = await this.repo.list(query);
-    return samples.map((sample: any) => toSampleResponse(sample));
+    return samples.map((sample) => toSampleResponse(sample));
+  }
+
+  async findById(
+    id: string,
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<SampleWithRelations | null> {
+    return this.repo.findById(id, options);
   }
 
   async getById(id: string): Promise<SampleResponse> {
     const sample = await this.repo.findById(id);
-    if (!sample) {
+    if (!sample || sample.deletedAt) {
       throw new NotFoundError('Sample not found');
     }
 
@@ -190,7 +201,7 @@ export class SampleService {
 
   async update(id: string, body: UpdateSampleBody): Promise<SampleResponse> {
     const existing = await this.repo.findById(id);
-    if (!existing) {
+    if (!existing || existing.deletedAt) {
       throw new NotFoundError('Sample not found');
     }
 
@@ -219,7 +230,30 @@ export class SampleService {
   }
 
   async softDelete(id: string): Promise<SampleResponse> {
-    const deleted = await this.repo.softDelete(id);
+    const existing = await this.repo.findById(id, { includeDeleted: true });
+    if (!existing) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    if (existing.deletedAt) {
+      return toSampleResponse(existing);
+    }
+
+    const deletedAt = new Date();
+    const deleted = await this.repo.softDelete(id, deletedAt);
+    await this.repo.markImageDeleted(id, deletedAt);
+
+    const objectKeys =
+      existing.image?.objectKey && existing.image.objectKey.length > 0
+        ? [existing.image.objectKey]
+        : [];
+
+    await this.cleanupTasks.enqueueSampleCleanup({
+      sampleId: deleted.id,
+      userId: deleted.userId,
+      objectKeys,
+    });
+
     return toSampleResponse(deleted);
   }
 }

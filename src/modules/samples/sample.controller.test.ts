@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const serviceMocks = vi.hoisted(() => ({
   list: vi.fn(),
+  findById: vi.fn(),
   getById: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
@@ -166,7 +167,7 @@ describe('Samples controller', () => {
   });
 
   it('deletes when user authorized', async () => {
-    serviceMocks.getById.mockResolvedValue({ id: 'sample', userId: 'owner' });
+    serviceMocks.findById.mockResolvedValue({ id: 'sample', userId: 'owner' });
     serviceMocks.softDelete.mockResolvedValue({ id: 'sample', userId: 'owner' });
     const req = {
       params: { id: 'sample' },
@@ -176,7 +177,23 @@ describe('Samples controller', () => {
 
     await deleteSample(req, res, vi.fn());
 
+    expect(serviceMocks.findById).toHaveBeenCalledWith('sample', { includeDeleted: true });
     expect(serviceMocks.softDelete).toHaveBeenCalledWith('sample');
     expect(res.json).toHaveBeenCalledWith({ data: { id: 'sample', userId: 'owner' } });
+  });
+
+  it('returns 404 when deleting missing sample', async () => {
+    serviceMocks.findById.mockResolvedValue(null);
+    const req = {
+      params: { id: 'sample' },
+      authUser: { id: 'owner', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await deleteSample(req, res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: { message: 'Sample not found' } });
+    expect(serviceMocks.softDelete).not.toHaveBeenCalled();
   });
 });

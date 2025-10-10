@@ -127,8 +127,12 @@ export const updateSample = async (req: Request, res: Response, next: NextFuncti
 export const deleteSample = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const params = sampleIdParamSchema.parse(req.params);
-    const existing = await service.getById(params.id);
+    const existing = await service.findById(params.id, { includeDeleted: true });
     const authUser = req.authUser;
+
+    if (!existing) {
+      return res.status(404).json({ error: { message: 'Sample not found' } });
+    }
 
     if (authUser && !authUser.roles.includes('admin') && authUser.id !== existing.userId) {
       return res.status(403).json({ error: { message: 'Forbidden' } });
