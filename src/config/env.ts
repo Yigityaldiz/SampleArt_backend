@@ -36,6 +36,13 @@ const EnvSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_SECRET_KEY: z.string().optional(),
   CLEANUP_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
+  HTTPS_CERT_PATH: z.string().min(1).optional(),
+  HTTPS_KEY_PATH: z.string().min(1).optional(),
+  HTTPS_CA_PATH: z.string().min(1).optional(),
+  FORCE_HTTPS_REDIRECT: z
+    .enum(['true', 'false'])
+    .default(process.env.NODE_ENV === 'production' ? 'true' : 'false')
+    .transform((value) => value === 'true'),
 });
 
 const parsed = EnvSchema.parse({
@@ -52,7 +59,15 @@ const parsed = EnvSchema.parse({
   CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
   CLEANUP_POLL_INTERVAL_MS: process.env.CLEANUP_POLL_INTERVAL_MS,
+  HTTPS_CERT_PATH: process.env.HTTPS_CERT_PATH,
+  HTTPS_KEY_PATH: process.env.HTTPS_KEY_PATH,
+  HTTPS_CA_PATH: process.env.HTTPS_CA_PATH,
+  FORCE_HTTPS_REDIRECT: process.env.FORCE_HTTPS_REDIRECT,
 });
+
+if ((parsed.HTTPS_CERT_PATH && !parsed.HTTPS_KEY_PATH) || (!parsed.HTTPS_CERT_PATH && parsed.HTTPS_KEY_PATH)) {
+  throw new Error('HTTPS_CERT_PATH and HTTPS_KEY_PATH must both be set to enable HTTPS');
+}
 
 export const env = {
   ...parsed,
@@ -62,6 +77,8 @@ export const env = {
   loadedEnvFile: resolvedEnvFile,
   CLEANUP_POLL_INTERVAL_MS: parsed.CLEANUP_POLL_INTERVAL_MS,
   cleanupPollIntervalMs: parsed.CLEANUP_POLL_INTERVAL_MS ?? 60_000,
+  httpsEnabled: Boolean(parsed.HTTPS_CERT_PATH && parsed.HTTPS_KEY_PATH),
+  forceHttpsRedirect: parsed.FORCE_HTTPS_REDIRECT,
 };
 
 export type AppEnvironment = typeof env;

@@ -1,0 +1,49 @@
+services:
+  backend:
+    container_name: sample-art-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-sample_art}:${POSTGRES_PASSWORD:-sample_art}@${DATABASE_HOST:-postgres}:5432/${POSTGRES_DB:-sample_art}?schema=public"
+      UPLOAD_ROOT: /app/storage/uploads
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      S3_BUCKET: "${S3_BUCKET:-}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      CDN_BASE_URL: "${CDN_BASE_URL:-}"
+      CLERK_PUBLISHABLE_KEY: "${CLERK_PUBLISHABLE_KEY:-}"
+      CLERK_SECRET_KEY: "${CLERK_SECRET_KEY:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    volumes:
+      - uploads:/app/storage/uploads
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sample-art-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sample_art}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sample_art}
+      POSTGRES_DB: ${POSTGRES_DB:-sample_art}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-sample_art}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres_data:
+  uploads:

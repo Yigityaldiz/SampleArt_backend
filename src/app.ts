@@ -44,6 +44,24 @@ export const createApp = () => {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
 
+  if (env.forceHttpsRedirect) {
+    app.use((req, res, next) => {
+      if (req.secure) {
+        next();
+        return;
+      }
+
+      const host = req.headers.host;
+      if (!host) {
+        res.status(400).send('Host header is required');
+        return;
+      }
+
+      const redirectUrl = `https://${host}${req.originalUrl}`;
+      res.redirect(307, redirectUrl);
+    });
+  }
+
   if (env.isDevelopment) {
     app.use(mockAuthMiddleware);
   } else {
