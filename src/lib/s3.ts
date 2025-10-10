@@ -1,5 +1,11 @@
 import { randomUUID } from 'crypto';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config';
 
@@ -141,4 +147,35 @@ export const createGetObjectPresign = async (params: {
     downloadUrl,
     expiresIn,
   };
+};
+
+export const deleteS3Objects = async (keys: string[]): Promise<void> => {
+  if (!env.S3_BUCKET) {
+    throw new Error('S3 bucket is not configured');
+  }
+
+  const uniqueKeys = Array.from(new Set(keys.filter((key) => typeof key === 'string' && key)));
+
+  if (uniqueKeys.length === 0) {
+    return;
+  }
+
+  if (uniqueKeys.length === 1) {
+    const command = new DeleteObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: uniqueKeys[0],
+    });
+    await s3Client.send(command);
+    return;
+  }
+
+  const command = new DeleteObjectsCommand({
+    Bucket: env.S3_BUCKET,
+    Delete: {
+      Objects: uniqueKeys.map((key) => ({ Key: key })),
+      Quiet: true,
+    },
+  });
+
+  await s3Client.send(command);
 };

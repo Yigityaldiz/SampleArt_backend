@@ -35,6 +35,7 @@ const EnvSchema = z.object({
     .default(process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_SECRET_KEY: z.string().optional(),
+  CLEANUP_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
 });
 
 const parsed = EnvSchema.parse({
@@ -50,6 +51,7 @@ const parsed = EnvSchema.parse({
   LOG_LEVEL: process.env.LOG_LEVEL,
   CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+  CLEANUP_POLL_INTERVAL_MS: process.env.CLEANUP_POLL_INTERVAL_MS,
 });
 
 export const env = {
@@ -58,6 +60,8 @@ export const env = {
   isDevelopment: parsed.NODE_ENV === 'development',
   isTest: parsed.NODE_ENV === 'test',
   loadedEnvFile: resolvedEnvFile,
+  CLEANUP_POLL_INTERVAL_MS: parsed.CLEANUP_POLL_INTERVAL_MS,
+  cleanupPollIntervalMs: parsed.CLEANUP_POLL_INTERVAL_MS ?? 60_000,
 };
 
 export type AppEnvironment = typeof env;

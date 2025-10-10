@@ -22,6 +22,7 @@ model User {
   email      String?     @unique @db.Citext      // Case-insensitive, unique email
   name       String?
   locale     String?
+  deletedAt  DateTime?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -38,6 +39,8 @@ model Collection {
   id         String      @id @default(cuid())
   userId     String
   name       String
+  isDeleted  Boolean     @default(false)
+  deletedAt  DateTime?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -71,6 +74,7 @@ model Sample {
   locationLng      Decimal?     @db.Decimal(9, 6)
   notes            String?
   isDeleted        Boolean      @default(false)
+  deletedAt        DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -96,6 +100,7 @@ model SampleImage {
   height           Int?
   blurhash         String?
   exif             Json?
+  deletedAt        DateTime?
   createdAt        DateTime   @default(now())
 
   sample Sample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
@@ -118,4 +123,35 @@ model CollectionSample {
   @@id([collectionId, sampleId])
   @@index([collectionId, position])
   @@map("collection_samples")
+}
+
+//////////////////////////////////////////////////////////
+// CLEANUP TASKS
+//////////////////////////////////////////////////////////
+model CleanupTask {
+  id          String         @id @default(cuid())
+  entityType  CleanupEntity
+  entityId    String
+  payload     Json?
+  status      CleanupStatus  @default(PENDING)
+  attempts    Int            @default(0)
+  scheduledAt DateTime       @default(now())
+  lastError   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status, scheduledAt])
+  @@map("cleanup_tasks")
+}
+
+enum CleanupEntity {
+  SAMPLE
+  USER
+}
+
+enum CleanupStatus {
+  PENDING
+  RUNNING
+  FAILED
+  COMPLETED
 }
