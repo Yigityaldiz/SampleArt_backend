@@ -2,6 +2,8 @@ import type { Prisma, User } from '@prisma/client';
 import { NotFoundError } from '../../errors';
 import { UserRepository } from './repository';
 import type { UserResponse } from './schemas';
+import { prisma } from '../../lib/prisma';
+import { CleanupTaskService, cleanupTaskService } from '../cleanup';
 
 const toResponse = (user: User): UserResponse => {
   return {
@@ -15,7 +17,10 @@ const toResponse = (user: User): UserResponse => {
 };
 
 export class UserService {
-  constructor(private readonly repo = new UserRepository()) {}
+  constructor(
+    private readonly repo = new UserRepository(),
+    private readonly cleanupTasks: CleanupTaskService = cleanupTaskService,
+  ) {}
 
   async list(params: { skip?: number; take?: number } = {}): Promise<UserResponse[]> {
     const users = await this.repo.list(params);
@@ -39,5 +44,48 @@ export class UserService {
   async update(id: string, data: Prisma.UserUpdateInput): Promise<UserResponse> {
     const updated = await this.repo.update(id, data);
     return toResponse(updated);
+  }
+
+  async softDelete(id: string): Promise<void> {
+    const existing = await this.repo.findById(id, { includeDeleted: true });
+
+    if (!existing) {
+      throw new NotFoundError('User not found');
+    }
+
+    if (existing.deletedAt) {
+      return;
+    }
+
+    const deletedAt = new Date();
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id },
+        data: { deletedAt },
+      }),
+      prisma.collection.updateMany({
+        where: { userId: id },
+        data: { deletedAt, isDeleted: true },
+      }),
+      prisma.sample.updateMany({
+        where: { userId: id },
+        data: { deletedAt, isDeleted: true },
+      }),
+      prisma.sampleImage.updateMany({
+        where: { sample: { userId: id } },
+        data: { deletedAt },
+      }),
+    ]);
+
+    const images = await prisma.sampleImage.findMany({
+      where: { sample: { userId: id } },
+      select: { objectKey: true },
+    });
+
+    await this.cleanupTasks.enqueueUserCleanup({
+      userId: id,
+      objectKeys: images.map((image) => image.objectKey).filter((key): key is string => Boolean(key)),
+    });
   }
 }

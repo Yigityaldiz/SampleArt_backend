@@ -7,17 +7,30 @@ export type UserUpdateInput = Prisma.UserUpdateInput;
 export class UserRepository {
   constructor(private readonly db: PrismaClient = prisma) {}
 
-  findById(id: string) {
-    return this.db.user.findUnique({ where: { id } });
+  findById(id: string, options: { includeDeleted?: boolean } = {}) {
+    const { includeDeleted = false } = options;
+    return this.db.user.findFirst({
+      where: {
+        id,
+        ...(includeDeleted ? {} : { deletedAt: null }),
+      },
+    });
   }
 
   findByEmail(email: string) {
-    return this.db.user.findUnique({ where: { email } });
+    return this.db.user.findFirst({
+      where: { email, deletedAt: null },
+    });
   }
 
   list(params: { skip?: number; take?: number } = {}) {
     const { skip = 0, take = 25 } = params;
-    return this.db.user.findMany({ skip, take, orderBy: { createdAt: 'desc' } });
+    return this.db.user.findMany({
+      where: { deletedAt: null },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   create(data: UserCreateInput) {
@@ -30,6 +43,13 @@ export class UserRepository {
 
   delete(id: string) {
     return this.db.user.delete({ where: { id } });
+  }
+
+  softDelete(id: string, deletedAt: Date) {
+    return this.db.user.update({
+      where: { id },
+      data: { deletedAt },
+    });
   }
 }
 
