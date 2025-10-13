@@ -151,13 +151,69 @@ export const updateSample = async (req: Request, res: Response, next: NextFuncti
       return res.status(403).json({ error: { message: 'Forbidden' } });
     }
 
-    const sample = await service.update(params.id, body);
-    res.json({ data: sample });
+    const { collectionIds, ...updatePayload } = body;
+    const normalizedCollectionIds =
+      collectionIds !== undefined ? Array.from(new Set(collectionIds)) : undefined;
+
+    if (normalizedCollectionIds !== undefined) {
+      try {
+        for (const collectionId of normalizedCollectionIds) {
+          const collection = await collectionService.getById(collectionId);
+          if (collection.userId !== existing.userId) {
+            return res.status(403).json({ error: { message: 'Forbidden' } });
+          }
+        }
+      } catch (error) {
+        if (error instanceof NotFoundError) {
+          return res.status(404).json({ error: { message: 'Collection not found' } });
+        }
+
+        throw error;
+      }
+    }
+
+    const hasMetadataUpdates = Object.keys(updatePayload).length > 0;
+
+    let sample = existing;
+
+    if (hasMetadataUpdates) {
+      sample = await service.update(params.id, updatePayload);
+    }
+
+    if (normalizedCollectionIds === undefined) {
+      res.json({ data: sample });
+      return;
+    }
+
+    const currentCollectionIds = new Set(sample.collections.map((item) => item.collectionId));
+    const targetCollectionIds = new Set(normalizedCollectionIds);
+
+    const collectionsToAdd = normalizedCollectionIds.filter(
+      (collectionId) => !currentCollectionIds.has(collectionId),
+    );
+    const collectionsToRemove = [...currentCollectionIds].filter(
+      (collectionId) => !targetCollectionIds.has(collectionId),
+    );
+
+    for (const collectionId of collectionsToAdd) {
+      await collectionService.addSample(collectionId, sample.id);
+    }
+
+    for (const collectionId of collectionsToRemove) {
+      await collectionService.removeSample(collectionId, sample.id);
+    }
+
+    if (collectionsToAdd.length === 0 && collectionsToRemove.length === 0) {
+      res.json({ data: sample });
+      return;
+    }
+
+    const finalSample = await service.getById(params.id);
+    res.json({ data: finalSample });
   } catch (error) {
     next(error);
   }
 };
-
 export const deleteSample = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const params = sampleIdParamSchema.parse(req.params);

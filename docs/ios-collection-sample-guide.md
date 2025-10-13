@@ -77,4 +77,5 @@ Bu komut örneği, iOS tarafında `URLRequest` veya benzeri bir HTTP istemcisiyl
 
 ## Ek Notlar
 
+- Mevcut bir sample'ı düzenlerken koleksiyon listesini değiştirmek için `PATCH /samples/:sampleId` isteğine `collectionIds` alanı ekleyebilirsiniz. Liste koleksiyon üyeliğini tamamen yeniden yazar; boş gönderilirse sample tüm koleksiyonlardan çıkarılır.
 - Bir sample'ı kaldırmak için `DELETE /collections/:collectionId/samples/:sampleId` çağrısını kullanın; sunucu kalan sample'ların pozisyonlarını otomatik olarak normalize eder.

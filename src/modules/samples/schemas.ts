@@ -66,7 +66,10 @@ export const createSampleBodySchema = baseSampleBodySchema.extend({
 export const updateSampleBodySchema = baseSampleBodySchema
   .omit({ userId: true })
   .partial()
-  .extend({ isDeleted: z.boolean().optional() })
+  .extend({
+    isDeleted: z.boolean().optional(),
+    collectionIds: z.array(z.string().min(1)).max(20).optional(),
+  })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field is required',
   });

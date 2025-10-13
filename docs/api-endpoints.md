@@ -228,10 +228,24 @@ Bu doküman, Sample Art Backend projesindeki HTTP uç noktalarının tamamını,
 
 ### `PATCH /samples/:id`
 
-- **Amaç:** Örnek güncellemek.
+- **Amaç:** Örneği güncellemek ve opsiyonel olarak koleksiyon üyeliklerini tek istekte düzenlemek.
 - **Kimlik doğrulama:** Gerekli. Kaynağın sahibi veya admin olmalısınız.
-- **İstek gövdesi:** Opsiyonel alanlar; en az bir alan gönderilmelidir. `image` alanı gönderilirse mevcut görsel `upsert` edilir.
-- **Yanıt (`200`):** Güncellenen örnek.
+- **İstek gövdesi:** En az bir alan zorunludur. `collectionIds` gönderilirse örneğin hangi koleksiyonlarda yer alacağı tamamen bu listeye göre ayarlanır (eksikler silinir, yeniler eklenir).
+
+```json
+{
+  "title": "Güncellenmiş Mermer",
+  "notes": "Müşteri geri bildirimi eklendi",
+  "collectionIds": ["col_123", "col_456"]
+}
+```
+
+- **Davranış:** 
+  - `collectionIds` listesi maks. 20 öğelidir ve hedef koleksiyonlar oturum açmış kullanıcıya ait olmalıdır.
+  - Liste boş gönderilirse örnek tüm koleksiyonlardan çıkarılır.
+  - Sadece `collectionIds` gönderildiğinde de isteğe izin verilir; metadata alanları değişmeyebilir.
+  - Eğer belirtilen koleksiyonlardan biri bulunamazsa `404`, başka kullanıcıya aitse `403` döner ve metadata değişiklikleri uygulanmaz.
+- **Yanıt (`200`):** Güncellenen örnek (güncel koleksiyon üyelikleriyle birlikte).
 - **Hata durumları:** `401`, `403`, `404`.
 
 ### `DELETE /samples/:id`

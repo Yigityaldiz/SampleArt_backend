@@ -15,6 +15,7 @@ const serviceMocks = vi.hoisted(() => ({
 const collectionServiceMocks = vi.hoisted(() => ({
   getById: vi.fn(),
   addSample: vi.fn(),
+  removeSample: vi.fn(),
 }));
 
 vi.mock('./service', () => ({
@@ -214,6 +215,109 @@ describe('Samples controller', () => {
 
     expect(serviceMocks.update).toHaveBeenCalledWith('sample', { title: 'new' });
     expect(res.json).toHaveBeenCalledWith({ data: { id: 'sample', userId: 'owner' } });
+  });
+
+  it('updates collections when collectionIds provided', async () => {
+    const existingSample = {
+      id: 'sample',
+      userId: 'owner',
+      collections: [{ collectionId: 'col_1', position: 1 }],
+    };
+    const finalSample = {
+      id: 'sample',
+      userId: 'owner',
+      collections: [
+        { collectionId: 'col_1', position: 1 },
+        { collectionId: 'col_2', position: 2 },
+      ],
+    };
+
+    serviceMocks.getById
+      .mockResolvedValueOnce(existingSample)
+      .mockResolvedValueOnce(finalSample);
+
+    collectionServiceMocks.getById.mockImplementation(async (id: string) => ({
+      id,
+      userId: 'owner',
+    }));
+    collectionServiceMocks.addSample.mockResolvedValue({ sampleId: 'sample', position: 2 });
+
+    const req = {
+      params: { id: 'sample' },
+      body: { collectionIds: ['col_1', 'col_2'] },
+      authUser: { id: 'owner', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await updateSample(req, res, vi.fn());
+
+    expect(serviceMocks.update).not.toHaveBeenCalled();
+    expect(collectionServiceMocks.addSample).toHaveBeenCalledWith('col_2', 'sample');
+    expect(collectionServiceMocks.removeSample).not.toHaveBeenCalled();
+    expect(serviceMocks.getById).toHaveBeenCalledTimes(2);
+    expect(res.json).toHaveBeenCalledWith({ data: finalSample });
+  });
+
+  it('removes collections not present in payload', async () => {
+    const existingSample = {
+      id: 'sample',
+      userId: 'owner',
+      collections: [
+        { collectionId: 'col_1', position: 1 },
+        { collectionId: 'col_2', position: 2 },
+      ],
+    };
+    const updatedSample = { ...existingSample, title: 'new' };
+    const finalSample = {
+      id: 'sample',
+      userId: 'owner',
+      title: 'new',
+      collections: [{ collectionId: 'col_1', position: 1 }],
+    };
+
+    serviceMocks.getById
+      .mockResolvedValueOnce(existingSample)
+      .mockResolvedValueOnce(finalSample);
+    serviceMocks.update.mockResolvedValue(updatedSample);
+
+    collectionServiceMocks.getById.mockImplementation(async (id: string) => ({
+      id,
+      userId: 'owner',
+    }));
+    collectionServiceMocks.removeSample.mockResolvedValue({ id: 'col_2' });
+
+    const req = {
+      params: { id: 'sample' },
+      body: { title: 'new', collectionIds: ['col_1'] },
+      authUser: { id: 'owner', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await updateSample(req, res, vi.fn());
+
+    expect(serviceMocks.update).toHaveBeenCalledWith('sample', { title: 'new' });
+    expect(collectionServiceMocks.getById).toHaveBeenCalledWith('col_1');
+    expect(collectionServiceMocks.removeSample).toHaveBeenCalledWith('col_2', 'sample');
+    expect(collectionServiceMocks.addSample).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ data: finalSample });
+  });
+
+  it('returns 404 when collection is missing during update', async () => {
+    serviceMocks.getById.mockResolvedValue({ id: 'sample', userId: 'owner', collections: [] });
+    collectionServiceMocks.getById.mockRejectedValue(new NotFoundError('Collection not found'));
+    const req = {
+      params: { id: 'sample' },
+      body: { collectionIds: ['missing'] },
+      authUser: { id: 'owner', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await updateSample(req, res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(serviceMocks.update).not.toHaveBeenCalled();
+    expect(collectionServiceMocks.addSample).not.toHaveBeenCalled();
+    expect(collectionServiceMocks.removeSample).not.toHaveBeenCalled();
   });
 
   it('deletes when user authorized', async () => {
