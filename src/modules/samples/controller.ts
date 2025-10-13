@@ -3,6 +3,7 @@ import { NotFoundError } from '../../errors';
 import { UserService } from '../users/service';
 import type { AuthUser } from '../auth';
 import { SampleService } from './service';
+import { CollectionService } from '../collections/service';
 import {
   createSampleBodySchema,
   updateSampleBodySchema,
@@ -12,6 +13,7 @@ import {
 
 const service = new SampleService();
 const userService = new UserService();
+const collectionService = new CollectionService();
 
 const toNullable = <T>(value: T | null | undefined) => (value === undefined ? undefined : value);
 
@@ -79,6 +81,7 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
 
     await ensureUserRecord(authUser);
 
+    const collectionIds = Array.from(new Set(body.collectionIds ?? []));
     const targetUserId = body.userId ?? authUser.id;
 
     if (!authUser.roles.includes('admin') && targetUserId !== authUser.id) {
@@ -99,8 +102,39 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
+    for (const collectionId of collectionIds) {
+      try {
+        const collection = await collectionService.getById(collectionId);
+        if (collection.userId !== targetUserId) {
+          return res.status(403).json({ error: { message: 'Forbidden' } });
+        }
+      } catch (error) {
+        if (error instanceof NotFoundError) {
+          return res.status(404).json({ error: { message: 'Collection not found' } });
+        }
+
+        throw error;
+      }
+    }
+
     const sample = await service.create({ ...body, userId: targetUserId });
-    res.status(201).json({ data: sample });
+
+    if (collectionIds.length === 0) {
+      res.status(201).json({ data: sample });
+      return;
+    }
+
+    try {
+      for (const collectionId of collectionIds) {
+        await collectionService.addSample(collectionId, sample.id);
+      }
+    } catch (error) {
+      await service.hardDelete(sample.id);
+      throw error;
+    }
+
+    const updatedSample = await service.getById(sample.id);
+    res.status(201).json({ data: updatedSample });
   } catch (error) {
     next(error);
   }

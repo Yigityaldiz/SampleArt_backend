@@ -36,7 +36,7 @@ const sampleImageInputSchema = z.object({
   exif: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const createSampleBodySchema = z.object({
+const baseSampleBodySchema = z.object({
   userId: z.string().min(1),
   title: z.string().min(1),
   materialType: z.string().min(1),
@@ -59,7 +59,12 @@ export const createSampleBodySchema = z.object({
   image: sampleImageInputSchema.optional(),
 });
 
-export const updateSampleBodySchema = createSampleBodySchema
+export const createSampleBodySchema = baseSampleBodySchema.extend({
+  collectionIds: z.array(z.string().min(1)).max(20).optional(),
+});
+
+export const updateSampleBodySchema = baseSampleBodySchema
+  .omit({ userId: true })
   .partial()
   .extend({ isDeleted: z.boolean().optional() })
   .refine((data) => Object.keys(data).length > 0, {

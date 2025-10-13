@@ -175,24 +175,25 @@ export class SampleService {
   }
 
   async create(body: CreateSampleBody): Promise<SampleResponse> {
+    const { collectionIds: _collectionIds, ...rest } = body;
     const data: Prisma.SampleUncheckedCreateInput = {
-      userId: body.userId,
-      title: body.title,
-      materialType: body.materialType,
-      applicationArea: body.applicationArea,
-      surface: body.surface,
-      colorHex: body.colorHex,
-      colorName: body.colorName,
-      companyName: body.companyName,
-      priceMinor: body.priceMinor,
-      priceCurrency: body.priceCurrency?.toUpperCase(),
-      quantityValue: decimalOrUndefined(body.quantityValue),
-      quantityUnit: body.quantityUnit,
-      sizeText: body.sizeText,
-      locationLat: decimalOrUndefined(body.locationLat),
-      locationLng: decimalOrUndefined(body.locationLng),
-      notes: body.notes,
-      image: body.image ? { create: mapImageCreate(body.image) } : undefined,
+      userId: rest.userId,
+      title: rest.title,
+      materialType: rest.materialType,
+      applicationArea: rest.applicationArea,
+      surface: rest.surface,
+      colorHex: rest.colorHex,
+      colorName: rest.colorName,
+      companyName: rest.companyName,
+      priceMinor: rest.priceMinor,
+      priceCurrency: rest.priceCurrency?.toUpperCase(),
+      quantityValue: decimalOrUndefined(rest.quantityValue),
+      quantityUnit: rest.quantityUnit,
+      sizeText: rest.sizeText,
+      locationLat: decimalOrUndefined(rest.locationLat),
+      locationLng: decimalOrUndefined(rest.locationLng),
+      notes: rest.notes,
+      image: rest.image ? { create: mapImageCreate(rest.image) } : undefined,
     };
 
     const created = await this.repo.create(data);
@@ -255,5 +256,9 @@ export class SampleService {
     });
 
     return toSampleResponse(deleted);
+  }
+
+  async hardDelete(id: string): Promise<void> {
+    await this.repo.hardDelete(id);
   }
 }

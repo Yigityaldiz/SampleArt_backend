@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { NotFoundError } from '../../errors';
 
 const serviceMocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -8,10 +9,20 @@ const serviceMocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   softDelete: vi.fn(),
+  hardDelete: vi.fn(),
+}));
+
+const collectionServiceMocks = vi.hoisted(() => ({
+  getById: vi.fn(),
+  addSample: vi.fn(),
 }));
 
 vi.mock('./service', () => ({
   SampleService: vi.fn().mockImplementation(() => serviceMocks),
+}));
+
+vi.mock('../collections/service', () => ({
+  CollectionService: vi.fn().mockImplementation(() => collectionServiceMocks),
 }));
 
 import {
@@ -32,6 +43,7 @@ const createResponse = () => {
 describe('Samples controller', () => {
   beforeEach(() => {
     Object.values(serviceMocks).forEach((mock) => mock.mockReset());
+    Object.values(collectionServiceMocks).forEach((mock) => mock.mockReset());
   });
 
   it('forces non-admin queries to current user', async () => {
@@ -119,6 +131,7 @@ describe('Samples controller', () => {
 
   it('creates sample for current user when authorized', async () => {
     serviceMocks.create.mockResolvedValue({ id: 'sample' });
+    serviceMocks.getById.mockResolvedValue({ id: 'sample', collections: [] });
     const req = {
       body: { userId: 'user_1', title: 't', materialType: 'm' },
       authUser: { id: 'user_1', roles: ['user'] },
@@ -133,6 +146,43 @@ describe('Samples controller', () => {
       title: 't',
       materialType: 'm',
     });
+    expect(collectionServiceMocks.getById).not.toHaveBeenCalled();
+    expect(collectionServiceMocks.addSample).not.toHaveBeenCalled();
+  });
+
+  it('links new sample to provided collections', async () => {
+    serviceMocks.create.mockResolvedValue({ id: 'sample', collections: [] });
+    serviceMocks.getById.mockResolvedValue({ id: 'sample', collections: [{ collectionId: 'col_1' }] });
+    collectionServiceMocks.getById.mockResolvedValue({ id: 'col_1', userId: 'user_1' });
+    collectionServiceMocks.addSample.mockResolvedValue({ sampleId: 'sample', position: 1 });
+    const req = {
+      body: { userId: 'user_1', title: 't', materialType: 'm', collectionIds: ['col_1'] },
+      authUser: { id: 'user_1', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await createSample(req, res, vi.fn());
+
+    expect(collectionServiceMocks.getById).toHaveBeenCalledWith('col_1');
+    expect(collectionServiceMocks.addSample).toHaveBeenCalledWith('col_1', 'sample');
+    expect(serviceMocks.getById).toHaveBeenCalledWith('sample');
+    expect(serviceMocks.hardDelete).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('returns 404 when collection not found while creating sample', async () => {
+    collectionServiceMocks.getById.mockRejectedValue(new NotFoundError('Collection not found'));
+    const req = {
+      body: { userId: 'user_1', title: 't', materialType: 'm', collectionIds: ['missing'] },
+      authUser: { id: 'user_1', roles: ['user'] },
+    } as unknown as Request;
+    const res = createResponse();
+
+    await createSample(req, res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(serviceMocks.create).not.toHaveBeenCalled();
+    expect(collectionServiceMocks.addSample).not.toHaveBeenCalled();
   });
 
   it('forbids update when user not owner', async () => {
