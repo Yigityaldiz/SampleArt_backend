@@ -3,6 +3,7 @@ import type { User } from '@clerk/backend';
 import type { AuthRole, AuthUser, AuthVerifier } from './types';
 import { env } from '../../config';
 import { logger } from '../../lib/logger';
+import { isSupportedLanguageCode } from '../users/languages';
 
 const ALLOWED_ROLES: AuthRole[] = ['admin', 'user', 'viewer'];
 
@@ -118,12 +119,15 @@ const resolveDisplayName = (user: User): string | null => {
 const mapUserToAuthUser = (user: User): AuthUser => {
   const publicMetadata = (user.publicMetadata ?? {}) as Record<string, unknown>;
   const roleSource = user.privateMetadata?.roles ?? publicMetadata.roles;
+  const rawLocale = publicMetadata.locale;
+  const locale =
+    typeof rawLocale === 'string' && isSupportedLanguageCode(rawLocale) ? rawLocale : null;
 
   return {
     id: user.id,
     email: resolvePrimaryEmail(user),
     name: resolveDisplayName(user),
-    locale: (publicMetadata.locale as string | undefined) ?? null,
+    locale,
     roles: coerceRoles(roleSource),
     metadata: publicMetadata,
   };

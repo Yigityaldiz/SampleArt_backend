@@ -7,11 +7,16 @@ import {
   userIdParamSchema,
   createUserBodySchema,
   updateUserBodySchema,
+  updateUserLanguageBodySchema,
 } from './schemas';
+import { isSupportedLanguageCode } from './languages';
 
 const service = new UserService();
 
 const toNullable = <T>(value: T | null | undefined) => (value === undefined ? undefined : value);
+
+const normalizeLocale = (value: string | null | undefined) =>
+  typeof value === 'string' && isSupportedLanguageCode(value) ? value : undefined;
 
 const ensureUserRecord = async (authUser: AuthUser) => {
   try {
@@ -25,9 +30,17 @@ const ensureUserRecord = async (authUser: AuthUser) => {
       id: authUser.id,
       email: toNullable(authUser.email),
       name: toNullable(authUser.name),
-      locale: toNullable(authUser.locale),
+      locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }
+};
+
+const isRecordNotFoundError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  return 'code' in error && (error as { code?: string }).code === 'P2025';
 };
 
 export const listUsers = async (req: Request, res: Response, next: NextFunction) => {
@@ -145,6 +158,49 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
 
     const user = await ensureUserRecord(authUser);
     return res.json({ data: user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateCurrentUserLanguage = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const body = updateUserLanguageBodySchema.parse(req.body);
+    try {
+      const updated = await service.update(authUser.id, {
+        locale: body.locale,
+      });
+
+      res.json({ data: updated });
+      return;
+    } catch (error) {
+      if (!isRecordNotFoundError(error)) {
+        throw error;
+      }
+
+      await service.create({
+        id: authUser.id,
+        email: toNullable(authUser.email),
+        name: toNullable(authUser.name),
+        locale: toNullable(body.locale),
+      });
+
+      const updated = await service.update(authUser.id, {
+        locale: body.locale,
+      });
+
+      res.json({ data: updated });
+    }
   } catch (error) {
     next(error);
   }

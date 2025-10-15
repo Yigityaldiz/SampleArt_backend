@@ -1,11 +1,13 @@
 export type AuthRole = 'admin' | 'user' | 'viewer';
 
+import type { SupportedLanguageCode } from '../users/languages';
+
 export interface AuthUser {
   id: string;
   email?: string | null;
   name?: string | null;
   roles: AuthRole[];
-  locale?: string | null;
+  locale?: SupportedLanguageCode | null;
   metadata?: Record<string, unknown> | null;
 }
 

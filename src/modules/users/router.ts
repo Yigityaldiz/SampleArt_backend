@@ -1,7 +1,14 @@
 import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { requireAuth } from '../auth';
-import { listUsers, getUser, createUser, updateUser, getCurrentUser } from './controller';
+import {
+  listUsers,
+  getUser,
+  createUser,
+  updateUser,
+  getCurrentUser,
+  updateCurrentUserLanguage,
+} from './controller';
 
 const ensureSelf: RequestHandler = (req, res, next) => {
   const user = req.authUser;
@@ -39,6 +46,7 @@ router.use(requireAuth);
 
 router.get('/', listUsers);
 router.get('/me', getCurrentUser);
+router.patch('/me/language', updateCurrentUserLanguage);
 router.get('/:id', ensureSelf, getUser);
 router.post('/', ensureBodyMatchesSelf, createUser);
 router.patch('/:id', ensureSelf, updateUser);

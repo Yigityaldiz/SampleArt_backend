@@ -4,13 +4,23 @@ import { UserRepository } from './repository';
 import type { UserResponse } from './schemas';
 import { prisma } from '../../lib/prisma';
 import { CleanupTaskService, cleanupTaskService } from '../cleanup';
+import { isSupportedLanguageCode } from './languages';
+import type { SupportedLanguageCode } from './languages';
+
+const toSupportedLocale = (value: string | null | undefined): SupportedLanguageCode | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return isSupportedLanguageCode(value) ? value : null;
+};
 
 const toResponse = (user: User): UserResponse => {
   return {
     id: user.id,
     email: typeof user.email === 'string' ? user.email : null,
     name: typeof user.name === 'string' ? user.name : null,
-    locale: typeof user.locale === 'string' ? user.locale : null,
+    locale: toSupportedLocale(user.locale),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   } satisfies UserResponse;

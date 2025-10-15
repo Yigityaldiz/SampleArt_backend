@@ -55,7 +55,7 @@ Bu doküman, Sample Art Backend projesindeki HTTP uç noktalarının tamamını,
       "id": "user_123",
       "email": "first@example.com",
       "name": "First User",
-      "locale": "tr-TR",
+      "locale": "tr",
       "createdAt": "2025-09-01T10:00:00.000Z",
       "updatedAt": "2025-09-10T15:30:00.000Z"
     }
@@ -87,7 +87,7 @@ Bu doküman, Sample Art Backend projesindeki HTTP uç noktalarının tamamını,
   "id": "user_123",
   "email": "first@example.com",
   "name": "First User",
-  "locale": "tr-TR"
+  "locale": "tr"
 }
 ```
 
@@ -106,12 +106,29 @@ Bu doküman, Sample Art Backend projesindeki HTTP uç noktalarının tamamını,
 {
   "email": "updated@example.com",
   "name": "Updated User",
-  "locale": "en-US"
+  "locale": "en"
 }
 ```
 
 - **Yanıt (`200`):** Güncellenmiş kullanıcı nesnesi.
 - **Hata durumları:** `401`, `403`, `404`.
+
+### `PATCH /users/me/language`
+
+- **Amaç:** Oturum açmış kullanıcının tercih ettiği dili güncellemek.
+- **Kimlik doğrulama:** Gerekli.
+- **Davranış:** Kullanıcı kaydı mevcut değilse backend önce otomatik oluşturur, ardından dili günceller.
+- **İstek gövdesi:**
+
+```json
+{
+  "locale": "tr"
+}
+```
+
+- **Desteklenen kodlar:** `en`, `en-US`, `tr`, `tr-TR`, `es`, `it`, `fr`, `nb`, `nl`, `pt-BR`, `de`, `ar`, `ja`, `zh-Hans`, `hi`, `el`.
+- **Yanıt (`200`):** Güncellenmiş kullanıcı nesnesi.
+- **Hata durumları:** `401`.
 
 ## Örnekler (`/samples`)
 

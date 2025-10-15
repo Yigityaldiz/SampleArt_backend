@@ -10,12 +10,15 @@ import {
   listSamplesQuerySchema,
   sampleIdParamSchema,
 } from './schemas';
+import { isSupportedLanguageCode } from '../users/languages';
 
 const service = new SampleService();
 const userService = new UserService();
 const collectionService = new CollectionService();
 
 const toNullable = <T>(value: T | null | undefined) => (value === undefined ? undefined : value);
+const normalizeLocale = (value: string | null | undefined) =>
+  typeof value === 'string' && isSupportedLanguageCode(value) ? value : undefined;
 
 const ensureUserRecord = async (authUser: AuthUser) => {
   try {
@@ -29,7 +32,7 @@ const ensureUserRecord = async (authUser: AuthUser) => {
       id: authUser.id,
       email: toNullable(authUser.email),
       name: toNullable(authUser.name),
-      locale: toNullable(authUser.locale),
+      locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }
 };

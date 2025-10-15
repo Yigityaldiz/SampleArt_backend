@@ -1,4 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+}));
+
+vi.mock('../../lib/logger', () => ({
+  logger: loggerMock,
+}));
+
 import { UserService } from './service';
 import { NotFoundError } from '../../errors';
 
@@ -11,6 +24,9 @@ describe('UserService', () => {
     create: vi.fn(),
     update: vi.fn(),
   };
+  const cleanupTasks = {
+    enqueueUserCleanup: vi.fn(),
+  };
 
   const baseUser = {
     id: 'user_1',
@@ -21,7 +37,7 @@ describe('UserService', () => {
     updatedAt: createDate(),
   } as const;
 
-  const service = new UserService(repo as any);
+  const service = new UserService(repo as any, cleanupTasks as any);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -52,6 +68,17 @@ describe('UserService', () => {
 
     expect(repo.findById).toHaveBeenCalledWith('user_1');
     expect(result.id).toBe('user_1');
+  });
+
+  it('normalizes unsupported locale to null', async () => {
+    repo.findById.mockResolvedValue({
+      ...baseUser,
+      locale: 'xx-YY',
+    });
+
+    const result = await service.getById('user_1');
+
+    expect(result.locale).toBeNull();
   });
 
   it('throws NotFoundError when user missing', async () => {

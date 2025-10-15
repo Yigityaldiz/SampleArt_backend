@@ -12,7 +12,14 @@ vi.mock('./service', () => ({
   UserService: vi.fn().mockImplementation(() => serviceMocks),
 }));
 
-import { listUsers, getUser, createUser, updateUser, getCurrentUser } from './controller';
+import {
+  listUsers,
+  getUser,
+  createUser,
+  updateUser,
+  getCurrentUser,
+  updateCurrentUserLanguage,
+} from './controller';
 import type { AuthUser } from '../auth';
 import { NotFoundError } from '../../errors';
 
@@ -180,6 +187,82 @@ describe('Users controller', () => {
       locale: undefined,
     });
     expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_missing' } });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('updates current user language', async () => {
+    const req = {
+      authUser: createAuthUser(),
+      body: { locale: 'en' },
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.update.mockResolvedValue({ id: 'user_1', locale: 'en' });
+
+    await updateCurrentUserLanguage(req, res, next);
+
+    expect(serviceMocks.update).toHaveBeenCalledWith('user_1', { locale: 'en' });
+    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'en' } });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('creates missing user before updating language', async () => {
+    const req = {
+      authUser: createAuthUser({ email: 'user@example.com', name: 'User' }),
+      body: { locale: 'tr' },
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.update
+      .mockRejectedValueOnce({ code: 'P2025' })
+      .mockResolvedValueOnce({ id: 'user_1', locale: 'tr' });
+    serviceMocks.create.mockResolvedValue({ id: 'user_1' });
+
+    await updateCurrentUserLanguage(req, res, next);
+
+    expect(serviceMocks.create).toHaveBeenCalledWith({
+      id: 'user_1',
+      email: 'user@example.com',
+      name: 'User',
+      locale: 'tr',
+    });
+    expect(serviceMocks.update).toHaveBeenCalledTimes(2);
+    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'tr' } });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('propagates non-P2025 errors when updating language', async () => {
+    const req = {
+      authUser: createAuthUser(),
+      body: { locale: 'en' },
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+    const error = new Error('boom');
+
+    serviceMocks.update.mockRejectedValue(error);
+
+    await updateCurrentUserLanguage(req, res, next);
+
+    expect(serviceMocks.create).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(error);
+  });
+
+  it('returns 401 when updating language without auth', async () => {
+    const req = {
+      authUser: undefined,
+      body: { locale: 'en' },
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    await updateCurrentUserLanguage(req, res, next);
+
+    expect(serviceMocks.update).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: { message: 'Unauthorized' } });
     expect(next).not.toHaveBeenCalled();
   });
 });
