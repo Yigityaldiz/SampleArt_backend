@@ -32,7 +32,8 @@ describe('UserService', () => {
     id: 'user_1',
     email: 'test@example.com',
     name: 'Test User',
-    locale: 'en-US',
+    profileStatus: 'COMPLETE',
+    locale: 'en',
     createdAt: createDate(),
     updatedAt: createDate(),
   } as const;
@@ -54,6 +55,9 @@ describe('UserService', () => {
         id: baseUser.id,
         email: baseUser.email,
         name: baseUser.name,
+        displayName: baseUser.name,
+        profileStatus: 'COMPLETE',
+        requiredFields: [],
         locale: baseUser.locale,
         createdAt: baseUser.createdAt.toISOString(),
         updatedAt: baseUser.updatedAt.toISOString(),
@@ -68,6 +72,8 @@ describe('UserService', () => {
 
     expect(repo.findById).toHaveBeenCalledWith('user_1');
     expect(result.id).toBe('user_1');
+    expect(result.displayName).toBe(baseUser.name);
+    expect(result.profileStatus).toBe('COMPLETE');
   });
 
   it('normalizes unsupported locale to null', async () => {
@@ -87,13 +93,46 @@ describe('UserService', () => {
     await expect(service.getById('missing')).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it('falls back to email prefix when name missing', async () => {
+    repo.findById.mockResolvedValue({
+      ...baseUser,
+      name: null,
+      profileStatus: 'INCOMPLETE',
+    });
+
+    const result = await service.getById(baseUser.id);
+
+    expect(result.name).toBeNull();
+    expect(result.displayName).toBe('test');
+    expect(result.profileStatus).toBe('INCOMPLETE');
+    expect(result.requiredFields).toEqual(['name']);
+  });
+
+  it('falls back to id when both name and email missing', async () => {
+    repo.findById.mockResolvedValue({
+      ...baseUser,
+      name: null,
+      email: null,
+      profileStatus: 'INCOMPLETE',
+    });
+
+    const result = await service.getById(baseUser.id);
+
+    expect(result.displayName).toBe('user-user_1');
+  });
+
   it('creates user and maps response', async () => {
     repo.create.mockResolvedValue(baseUser);
 
     const result = await service.create({ id: 'user_1' } as any);
 
-    expect(repo.create).toHaveBeenCalledWith({ id: 'user_1' });
+    expect(repo.create).toHaveBeenCalledWith({
+      id: 'user_1',
+      name: null,
+      profileStatus: 'INCOMPLETE',
+    });
     expect(result.email).toBe(baseUser.email);
+    expect(result.profileStatus).toBe('COMPLETE');
   });
 
   it('updates user and maps response', async () => {
@@ -101,7 +140,27 @@ describe('UserService', () => {
 
     const result = await service.update('user_1', { name: 'New' });
 
-    expect(repo.update).toHaveBeenCalledWith('user_1', { name: 'New' });
+    expect(repo.update).toHaveBeenCalledWith('user_1', {
+      name: 'New',
+      profileStatus: 'COMPLETE',
+    });
     expect(result.updatedAt).toBe(baseUser.updatedAt.toISOString());
+  });
+
+  it('marks user incomplete when name cleared on update', async () => {
+    repo.update.mockResolvedValue({
+      ...baseUser,
+      name: null,
+      profileStatus: 'INCOMPLETE',
+    });
+
+    const result = await service.update('user_1', { name: null });
+
+    expect(repo.update).toHaveBeenCalledWith('user_1', {
+      name: null,
+      profileStatus: 'INCOMPLETE',
+    });
+    expect(result.profileStatus).toBe('INCOMPLETE');
+    expect(result.requiredFields).toEqual(['name']);
   });
 });

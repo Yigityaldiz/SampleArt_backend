@@ -64,6 +64,7 @@ export const defaultUserSelect: Prisma.UserSelect = {
   id: true,
   email: true,
   name: true,
+  profileStatus: true,
   locale: true,
   createdAt: true,
   updatedAt: true,

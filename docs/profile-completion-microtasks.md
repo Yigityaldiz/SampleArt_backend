@@ -1,0 +1,7 @@
+- [x] 1. Update Prisma schema with `ProfileStatus` enum and `profileStatus` column for users, including migration/backfill.
+- [x] 2. Add name normalization helper and tighten user name validation (trim, collapse whitespace, printable, 2–80 chars).
+- [x] 3. Adjust user service/repository mappings to maintain `profileStatus`, compute `displayName`, and include `requiredFields`.
+- [x] 4. Update user controllers to use normalized names, surface profile status details on `/users/me`, and honor status transitions.
+- [x] 5. Ensure seed data and related bootstrap paths set coherent `profileStatus` defaults.
+- [x] 6. Expand tests to cover new validation, profile status handling, and display name fallback.
+- [x] 7. Run project tests to confirm regressions are avoided.

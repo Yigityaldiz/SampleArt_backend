@@ -2,6 +2,18 @@ import type { Request, Response } from 'express';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundError } from '../../errors';
 
+const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+}));
+
+vi.mock('../../lib/logger', () => ({
+  logger: loggerMock,
+}));
+
 const serviceMocks = vi.hoisted(() => ({
   list: vi.fn(),
   findById: vi.fn(),

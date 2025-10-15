@@ -10,12 +10,14 @@ async function main() {
     update: {
       email: 'admin@sampleart.local',
       name: 'Seed Admin',
+      profileStatus: 'COMPLETE',
       locale: 'tr-TR',
     },
     create: {
       id: userId,
       email: 'admin@sampleart.local',
       name: 'Seed Admin',
+      profileStatus: 'COMPLETE',
       locale: 'tr-TR',
     },
   });

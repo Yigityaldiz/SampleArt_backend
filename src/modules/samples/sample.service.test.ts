@@ -3,6 +3,18 @@ import { Prisma } from '@prisma/client';
 import { SampleService } from './service';
 import { NotFoundError } from '../../errors';
 
+const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+}));
+
+vi.mock('../../lib/logger', () => ({
+  logger: loggerMock,
+}));
+
 const date = new Date('2024-01-01T00:00:00.000Z');
 
 const createDecimal = (value: string) => new Prisma.Decimal(value);

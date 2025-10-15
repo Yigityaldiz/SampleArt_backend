@@ -11,6 +11,7 @@ import {
   sampleIdParamSchema,
 } from './schemas';
 import { isSupportedLanguageCode } from '../users/languages';
+import { sanitizeOptionalName } from '../users/name';
 
 const service = new SampleService();
 const userService = new UserService();
@@ -31,7 +32,7 @@ const ensureUserRecord = async (authUser: AuthUser) => {
     return userService.create({
       id: authUser.id,
       email: toNullable(authUser.email),
-      name: toNullable(authUser.name),
+      name: sanitizeOptionalName(authUser.name) ?? null,
       locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }

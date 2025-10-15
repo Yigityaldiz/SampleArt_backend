@@ -36,6 +36,18 @@ const createAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   ...overrides,
 });
 
+const baseUserResponse = {
+  id: 'user_1',
+  email: 'foo@example.com',
+  name: 'Foo',
+  displayName: 'Foo',
+  profileStatus: 'COMPLETE' as const,
+  requiredFields: [] as string[],
+  locale: 'en',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+};
+
 describe('Users controller', () => {
   beforeEach(() => {
     Object.values(serviceMocks).forEach((mock) => mock.mockReset());
@@ -49,13 +61,13 @@ describe('Users controller', () => {
     const res = createResponse();
     const next = vi.fn();
 
-    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
+    serviceMocks.getById.mockResolvedValue(baseUserResponse);
 
     await listUsers(req, res, next);
 
     expect(serviceMocks.list).not.toHaveBeenCalled();
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
-    expect(res.json).toHaveBeenCalledWith({ data: [{ id: 'user_1' }] });
+    expect(res.json).toHaveBeenCalledWith({ data: [baseUserResponse] });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -67,12 +79,12 @@ describe('Users controller', () => {
     const res = createResponse();
     const next = vi.fn();
 
-    serviceMocks.list.mockResolvedValue([{ id: 'user_1' }]);
+    serviceMocks.list.mockResolvedValue([baseUserResponse]);
 
     await listUsers(req, res, next);
 
     expect(serviceMocks.list).toHaveBeenCalledWith({ take: 5, skip: 0 });
-    expect(res.json).toHaveBeenCalledWith({ data: [{ id: 'user_1' }] });
+    expect(res.json).toHaveBeenCalledWith({ data: [baseUserResponse] });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -83,12 +95,12 @@ describe('Users controller', () => {
     } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
-    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
+    serviceMocks.getById.mockResolvedValue(baseUserResponse);
 
     await getUser(req, res, next);
 
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
+    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -98,13 +110,13 @@ describe('Users controller', () => {
         id: 'user_1',
         email: 'foo@example.com',
         name: 'Foo',
-        locale: 'en-US',
+        locale: 'en',
       },
       authUser: createAuthUser(),
     } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
-    serviceMocks.create.mockResolvedValue({ id: 'user_1' });
+    serviceMocks.create.mockResolvedValue(baseUserResponse);
 
     await createUser(req, res, next);
 
@@ -112,10 +124,10 @@ describe('Users controller', () => {
       id: 'user_1',
       email: 'foo@example.com',
       name: 'Foo',
-      locale: 'en-US',
+      locale: 'en',
     });
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
+    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
   });
 
   it('calls next when service throws', async () => {
@@ -132,6 +144,36 @@ describe('Users controller', () => {
     await updateUser(req, res, next);
 
     expect(next).toHaveBeenCalledWith(error);
+  });
+
+  it('normalizes name input before updating a user', async () => {
+    const req = {
+      params: { id: 'user_1' },
+      body: { name: '  New   Name  ' },
+      authUser: createAuthUser({ roles: ['admin'] }),
+    } as unknown as Request;
+    const res = createResponse();
+    const next = vi.fn();
+
+    serviceMocks.update.mockResolvedValue({
+      ...baseUserResponse,
+      name: 'New Name',
+      displayName: 'New Name',
+    });
+
+    await updateUser(req, res, next);
+
+    expect(serviceMocks.update).toHaveBeenCalledWith('user_1', {
+      name: 'New Name',
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        ...baseUserResponse,
+        name: 'New Name',
+        displayName: 'New Name',
+      },
+    });
+    expect(next).not.toHaveBeenCalled();
   });
 
   it('forbids accessing other users', async () => {
@@ -157,25 +199,34 @@ describe('Users controller', () => {
     const res = createResponse();
     const next = vi.fn();
 
-    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
+    serviceMocks.getById.mockResolvedValue(baseUserResponse);
 
     await getCurrentUser(req, res, next);
 
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
     expect(serviceMocks.create).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
+    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
     expect(next).not.toHaveBeenCalled();
   });
 
   it('lazily creates current user when missing', async () => {
     const req = {
-      authUser: createAuthUser({ id: 'user_missing', roles: ['user'], name: 'Missing' }),
+      authUser: createAuthUser({
+        id: 'user_missing',
+        roles: ['user'],
+        name: '  Missing   Name  ',
+      }),
     } as unknown as Request;
     const res = createResponse();
     const next = vi.fn();
 
     serviceMocks.getById.mockRejectedValue(new NotFoundError('User not found'));
-    serviceMocks.create.mockResolvedValue({ id: 'user_missing' });
+    serviceMocks.create.mockResolvedValue({
+      ...baseUserResponse,
+      id: 'user_missing',
+      name: 'Missing Name',
+      displayName: 'Missing Name',
+    });
 
     await getCurrentUser(req, res, next);
 
@@ -183,10 +234,17 @@ describe('Users controller', () => {
     expect(serviceMocks.create).toHaveBeenCalledWith({
       id: 'user_missing',
       email: undefined,
-      name: 'Missing',
+      name: 'Missing Name',
       locale: undefined,
     });
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_missing' } });
+    expect(res.json).toHaveBeenCalledWith({
+      data: {
+        ...baseUserResponse,
+        id: 'user_missing',
+        name: 'Missing Name',
+        displayName: 'Missing Name',
+      },
+    });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -198,12 +256,12 @@ describe('Users controller', () => {
     const res = createResponse();
     const next = vi.fn();
 
-    serviceMocks.update.mockResolvedValue({ id: 'user_1', locale: 'en' });
+    serviceMocks.update.mockResolvedValue({ ...baseUserResponse, locale: 'en' });
 
     await updateCurrentUserLanguage(req, res, next);
 
     expect(serviceMocks.update).toHaveBeenCalledWith('user_1', { locale: 'en' });
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'en' } });
+    expect(res.json).toHaveBeenCalledWith({ data: { ...baseUserResponse, locale: 'en' } });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -217,8 +275,8 @@ describe('Users controller', () => {
 
     serviceMocks.update
       .mockRejectedValueOnce({ code: 'P2025' })
-      .mockResolvedValueOnce({ id: 'user_1', locale: 'tr' });
-    serviceMocks.create.mockResolvedValue({ id: 'user_1' });
+      .mockResolvedValueOnce({ ...baseUserResponse, locale: 'tr' });
+    serviceMocks.create.mockResolvedValue(baseUserResponse);
 
     await updateCurrentUserLanguage(req, res, next);
 
@@ -229,7 +287,7 @@ describe('Users controller', () => {
       locale: 'tr',
     });
     expect(serviceMocks.update).toHaveBeenCalledTimes(2);
-    expect(res.json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'tr' } });
+    expect(res.json).toHaveBeenCalledWith({ data: { ...baseUserResponse, locale: 'tr' } });
     expect(next).not.toHaveBeenCalled();
   });
 

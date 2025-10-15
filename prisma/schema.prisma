@@ -21,6 +21,7 @@ model User {
   id         String      @id                     // Clerk user_id (ör. user_abc123)
   email      String?     @unique @db.Citext      // Case-insensitive, unique email
   name       String?
+  profileStatus ProfileStatus @default(INCOMPLETE)
   locale     String?
   deletedAt  DateTime?
   createdAt  DateTime    @default(now())
@@ -30,6 +31,11 @@ model User {
   collections Collection[]
 
   @@map("users")
+}
+
+enum ProfileStatus {
+  INCOMPLETE
+  COMPLETE
 }
 
 //////////////////////////////////////////////////////////
