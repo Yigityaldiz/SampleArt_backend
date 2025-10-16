@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { NotFoundError } from '../../errors';
+import { HttpError, NotFoundError } from '../../errors';
 import { UserService } from '../users/service';
 import type { AuthUser } from '../auth';
 import { SampleService } from './service';
@@ -11,7 +11,7 @@ import {
   sampleIdParamSchema,
 } from './schemas';
 import { isSupportedLanguageCode } from '../users/languages';
-import { sanitizeOptionalName } from '../users/name';
+import { ensureSampleAccess } from './access';
 
 const service = new SampleService();
 const userService = new UserService();
@@ -32,7 +32,7 @@ const ensureUserRecord = async (authUser: AuthUser) => {
     return userService.create({
       id: authUser.id,
       email: toNullable(authUser.email),
-      name: sanitizeOptionalName(authUser.name) ?? null,
+      name: toNullable(authUser.name),
       locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }
@@ -43,10 +43,32 @@ export const listSamples = async (req: Request, res: Response, next: NextFunctio
     let query = listSamplesQuerySchema.parse(req.query);
     const authUser = req.authUser;
 
-    if (authUser && !authUser.roles.includes('admin')) {
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const isAdmin = authUser.roles.includes('admin');
+
+    if (!isAdmin) {
+      const { collectionId } = query;
+
       query = {
         ...query,
-        userId: authUser.id,
+        includeDeleted: false,
+      };
+
+      if (collectionId) {
+        await collectionService.getForUser(collectionId, authUser.id);
+        delete query.userId;
+      } else {
+        query = {
+          ...query,
+          userId: authUser.id,
+        };
+      }
+    } else if (!query.includeDeleted) {
+      query = {
+        ...query,
         includeDeleted: false,
       };
     }
@@ -64,8 +86,24 @@ export const getSample = async (req: Request, res: Response, next: NextFunction)
     const sample = await service.getById(params.id);
 
     const authUser = req.authUser;
-    if (authUser && !authUser.roles.includes('admin') && authUser.id !== sample.userId) {
-      return res.status(403).json({ error: { message: 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const isAdmin = authUser.roles.includes('admin');
+
+    try {
+      await ensureSampleAccess({
+        userId: authUser.id,
+        sampleOwnerId: sample.userId,
+        sampleId: sample.id,
+        isAdmin,
+      });
+    } catch (error) {
+      if (error instanceof HttpError && error.statusCode === 403) {
+        return res.status(403).json({ error: { message: 'Forbidden' } });
+      }
+      throw error;
     }
 
     res.json({ data: sample });
@@ -87,8 +125,9 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
 
     const collectionIds = Array.from(new Set(body.collectionIds ?? []));
     const targetUserId = body.userId ?? authUser.id;
+    const isAdmin = authUser.roles.includes('admin');
 
-    if (!authUser.roles.includes('admin') && targetUserId !== authUser.id) {
+    if (!isAdmin && targetUserId !== authUser.id) {
       return res.status(403).json({ error: { message: 'Forbidden' } });
     }
 
@@ -106,21 +145,6 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
-    for (const collectionId of collectionIds) {
-      try {
-        const collection = await collectionService.getById(collectionId);
-        if (collection.userId !== targetUserId) {
-          return res.status(403).json({ error: { message: 'Forbidden' } });
-        }
-      } catch (error) {
-        if (error instanceof NotFoundError) {
-          return res.status(404).json({ error: { message: 'Collection not found' } });
-        }
-
-        throw error;
-      }
-    }
-
     const sample = await service.create({ ...body, userId: targetUserId });
 
     if (collectionIds.length === 0) {
@@ -130,7 +154,11 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
 
     try {
       for (const collectionId of collectionIds) {
-        await collectionService.addSample(collectionId, sample.id);
+        if (isAdmin) {
+          await collectionService.addSample(collectionId, sample.id);
+        } else {
+          await collectionService.addSampleForUser(collectionId, authUser.id, sample.id);
+        }
       }
     } catch (error) {
       await service.hardDelete(sample.id);
@@ -150,33 +178,19 @@ export const updateSample = async (req: Request, res: Response, next: NextFuncti
     const body = updateSampleBodySchema.parse(req.body);
     const existing = await service.getById(params.id);
     const authUser = req.authUser;
-
-    if (authUser && !authUser.roles.includes('admin') && authUser.id !== existing.userId) {
-      return res.status(403).json({ error: { message: 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
+    const isAdmin = authUser.roles.includes('admin');
 
     const { collectionIds, ...updatePayload } = body;
     const normalizedCollectionIds =
       collectionIds !== undefined ? Array.from(new Set(collectionIds)) : undefined;
-
-    if (normalizedCollectionIds !== undefined) {
-      try {
-        for (const collectionId of normalizedCollectionIds) {
-          const collection = await collectionService.getById(collectionId);
-          if (collection.userId !== existing.userId) {
-            return res.status(403).json({ error: { message: 'Forbidden' } });
-          }
-        }
-      } catch (error) {
-        if (error instanceof NotFoundError) {
-          return res.status(404).json({ error: { message: 'Collection not found' } });
-        }
-
-        throw error;
-      }
-    }
-
     const hasMetadataUpdates = Object.keys(updatePayload).length > 0;
+
+    if (hasMetadataUpdates && !isAdmin && authUser.id !== existing.userId) {
+      return res.status(403).json({ error: { message: 'Forbidden' } });
+    }
 
     let sample = existing;
 
@@ -200,11 +214,19 @@ export const updateSample = async (req: Request, res: Response, next: NextFuncti
     );
 
     for (const collectionId of collectionsToAdd) {
-      await collectionService.addSample(collectionId, sample.id);
+      if (isAdmin) {
+        await collectionService.addSample(collectionId, sample.id);
+      } else {
+        await collectionService.addSampleForUser(collectionId, authUser.id, sample.id);
+      }
     }
 
     for (const collectionId of collectionsToRemove) {
-      await collectionService.removeSample(collectionId, sample.id);
+      if (isAdmin) {
+        await collectionService.removeSample(collectionId, sample.id);
+      } else {
+        await collectionService.removeSampleForUser(collectionId, authUser.id, sample.id);
+      }
     }
 
     if (collectionsToAdd.length === 0 && collectionsToRemove.length === 0) {

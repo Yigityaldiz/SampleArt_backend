@@ -32,17 +32,43 @@ export class SampleRepository {
     });
   }
 
-  list(params: { userId?: string; skip?: number; take?: number; includeDeleted?: boolean } = {}) {
-    const { userId, skip = 0, take = 25, includeDeleted = false } = params;
+  list(
+    params: {
+      userId?: string;
+      collectionId?: string;
+      skip?: number;
+      take?: number;
+      includeDeleted?: boolean;
+    } = {},
+  ) {
+    const { userId, collectionId, skip = 0, take = 25, includeDeleted = false } = params;
 
-    const where: Prisma.SampleWhereInput = {
-      userId,
-    };
+    const conditions: Prisma.SampleWhereInput[] = [];
+
+    if (userId) {
+      conditions.push({ userId });
+    }
 
     if (!includeDeleted) {
-      where.isDeleted = false;
-      where.deletedAt = null;
+      conditions.push({ isDeleted: false, deletedAt: null });
     }
+
+    if (collectionId) {
+      conditions.push({
+        collections: {
+          some: {
+            collectionId,
+          },
+        },
+      });
+    }
+
+    const where =
+      conditions.length > 0
+        ? {
+            AND: conditions,
+          }
+        : undefined;
 
     return this.db.sample.findMany({
       where,

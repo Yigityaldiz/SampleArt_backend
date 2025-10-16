@@ -18,6 +18,8 @@ export const createPresignedUploadBodySchema = z.object({
 
 export const createPresignedDownloadBodySchema = z.object({
   objectKey: z.string().min(1, 'objectKey is required'),
+  sampleId: z.string().min(1, 'sampleId is required'),
+  collectionId: z.string().min(1).optional(),
 });
 
 export type CreatePresignedUploadBody = z.infer<typeof createPresignedUploadBodySchema>;

@@ -23,6 +23,7 @@ export const listSamplesQuerySchema = z
     skip: z.coerce.number().int().min(0).optional(),
     take: z.coerce.number().int().min(1).max(100).optional(),
     includeDeleted: z.coerce.boolean().optional(),
+    collectionId: z.string().min(1).optional(),
   })
   .partial();
 

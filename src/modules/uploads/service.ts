@@ -1,6 +1,9 @@
 import { HttpError } from '../../errors';
 import { env } from '../../config';
 import { createPutObjectPresign, createGetObjectPresign } from '../../lib/s3';
+import { SampleRepository } from '../samples/repository';
+import { CollectionRepository } from '../collections/repository';
+import { ensureSampleAccess } from '../samples/access';
 import type {
   CreatePresignedDownloadBody,
   CreatePresignedUploadBody,
@@ -23,6 +26,11 @@ export interface PresignedDownloadResponse {
 }
 
 export class UploadService {
+  constructor(
+    private readonly sampleRepo = new SampleRepository(),
+    private readonly collectionRepo = new CollectionRepository(),
+  ) {}
+
   async createPresignedUpload(
     userId: string,
     body: CreatePresignedUploadBody,
@@ -69,6 +77,8 @@ export class UploadService {
     const key = body.objectKey.trim();
     const basePrefix = 'samples/';
     const allowedPrefix = `samples/${userId}/`;
+    const sampleId = body.sampleId.trim();
+    const collectionId = body.collectionId?.trim();
     const { allowAllKeys = false } = options;
 
     if (!key.startsWith(basePrefix)) {
@@ -76,7 +86,23 @@ export class UploadService {
     }
 
     if (!allowAllKeys && !key.startsWith(allowedPrefix)) {
-      throw new HttpError(403, 'Access to object denied');
+      const sample = await this.sampleRepo.findById(sampleId);
+      if (!sample || !sample.image || sample.image.objectKey !== key) {
+        throw new HttpError(404, 'Sample image not found for provided object key');
+      }
+
+      await ensureSampleAccess({
+        userId,
+        sampleOwnerId: sample.userId,
+        sampleId,
+        collectionId,
+        collectionRepo: this.collectionRepo,
+      }).catch((error) => {
+        if (error instanceof HttpError && error.statusCode === 403) {
+          throw new HttpError(403, 'Access to object denied');
+        }
+        throw error;
+      });
     }
 
     try {
