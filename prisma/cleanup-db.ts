@@ -4,8 +4,9 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const [collectionSamples, sampleImages, collections, samples, users] =
+  const [collectionMembers, collectionSamples, sampleImages, collections, samples, users] =
     await prisma.$transaction([
+      prisma.collectionMember.deleteMany(),
       prisma.collectionSample.deleteMany(),
       prisma.sampleImage.deleteMany(),
       prisma.collection.deleteMany(),
@@ -14,6 +15,7 @@ async function main() {
     ]);
 
   console.log('Cleanup complete', {
+    collectionMembers: collectionMembers.count,
     collectionSamples: collectionSamples.count,
     sampleImages: sampleImages.count,
     collections: collections.count,

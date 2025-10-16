@@ -10,7 +10,6 @@ import {
   updateUserLanguageBodySchema,
 } from './schemas';
 import { isSupportedLanguageCode } from './languages';
-import { sanitizeOptionalName } from './name';
 
 const service = new UserService();
 
@@ -30,7 +29,7 @@ const ensureUserRecord = async (authUser: AuthUser) => {
     return service.create({
       id: authUser.id,
       email: toNullable(authUser.email),
-      name: sanitizeOptionalName(authUser.name) ?? null,
+      name: toNullable(authUser.name),
       locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }
@@ -107,11 +106,10 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
       return res.status(403).json({ error: { message: 'Forbidden' } });
     }
 
-    const sanitizedName = sanitizeOptionalName(body.name);
     const created = await service.create({
       id: body.id,
       email: toNullable(body.email),
-      name: sanitizedName ?? null,
+      name: toNullable(body.name),
       locale: toNullable(body.locale),
     });
 
@@ -140,7 +138,7 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
     const body = updateUserBodySchema.parse(req.body);
     const updated = await service.update(params.id, {
       email: toNullable(body.email),
-      name: sanitizeOptionalName(body.name),
+      name: toNullable(body.name),
       locale: toNullable(body.locale),
     });
 
@@ -193,7 +191,7 @@ export const updateCurrentUserLanguage = async (
       await service.create({
         id: authUser.id,
         email: toNullable(authUser.email),
-        name: sanitizeOptionalName(authUser.name) ?? null,
+        name: toNullable(authUser.name),
         locale: toNullable(body.locale),
       });
 

@@ -7,6 +7,9 @@ import { isSupportedLanguageCode } from '../users/languages';
 
 const ALLOWED_ROLES: AuthRole[] = ['admin', 'user', 'viewer'];
 
+const isAuthRole = (value: string): value is AuthRole =>
+  ALLOWED_ROLES.some((role) => role === value);
+
 const clerkClient = env.CLERK_SECRET_KEY
   ? createClerkClient({
       secretKey: env.CLERK_SECRET_KEY,
@@ -85,7 +88,7 @@ const coerceRoles = (rawRoles: unknown): AuthRole[] => {
 
   if (typeof rawRoles === 'string') {
     const single = rawRoles.trim();
-    return ALLOWED_ROLES.includes(single as AuthRole) ? [single as AuthRole] : ['user'];
+    return isAuthRole(single) ? [single] : ['user'];
   }
 
   if (!Array.isArray(rawRoles)) {
@@ -94,8 +97,7 @@ const coerceRoles = (rawRoles: unknown): AuthRole[] => {
 
   const roles = rawRoles
     .map((role) => (typeof role === 'string' ? role.trim() : null))
-    .filter((role): role is AuthRole => Boolean(role) && ALLOWED_ROLES.includes(role as AuthRole))
-    .map((role) => role as AuthRole);
+    .filter((role): role is AuthRole => role !== null && isAuthRole(role));
 
   return roles.length > 0 ? roles : ['user'];
 };
@@ -108,8 +110,8 @@ const resolvePrimaryEmail = (user: User): string | null => {
 };
 
 const resolveDisplayName = (user: User): string | null => {
-  if (user.fullName) {
-    return user.fullName;
+  if (user.username && user.username.trim().length > 0) {
+    return user.username.trim();
   }
 
   const parts = [user.firstName, user.lastName].filter(Boolean);
@@ -134,8 +136,8 @@ const mapUserToAuthUser = (user: User): AuthUser => {
 };
 
 const unauthorizedError = (message: string, error?: unknown) => {
-  const err = new Error(message);
-  (err as Error & { status?: number }).status = 401;
+  const err: Error & { status?: number } = new Error(message);
+  err.status = 401;
 
   if (error instanceof Error) {
     err.cause = error;

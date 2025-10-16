@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
 import { CollectionService } from './service';
-import type { AuthUser } from '../auth';
 import {
   listCollectionsQuerySchema,
   collectionIdParamSchema,
@@ -9,24 +8,12 @@ import {
   addCollectionSampleBodySchema,
   reorderCollectionSamplesBodySchema,
   collectionSampleParamSchema,
+  createCollectionMemberBodySchema,
+  updateCollectionMemberBodySchema,
+  collectionMemberIdParamSchema,
 } from './schemas';
 
 const service = new CollectionService();
-
-const ensureAuthorized = (
-  authUser: AuthUser | undefined,
-  ownerId: string,
-): { allowed: boolean; reason?: 'unauthorized' | 'forbidden' } => {
-  if (!authUser) {
-    return { allowed: false, reason: 'unauthorized' };
-  }
-
-  if (authUser.id === ownerId) {
-    return { allowed: true };
-  }
-
-  return { allowed: false, reason: 'forbidden' };
-};
 
 export const listCollections = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -52,16 +39,13 @@ export const listCollections = async (req: Request, res: Response, next: NextFun
 export const getCollection = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const params = collectionIdParamSchema.parse(req.params);
-    const collection = await service.getById(params.id);
     const authUser = req.authUser;
 
-    const auth = ensureAuthorized(authUser, collection.userId);
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
+    const collection = await service.getForUser(params.id, authUser.id);
     res.json({ data: collection });
   } catch (error) {
     next(error);
@@ -92,16 +76,13 @@ export const updateCollection = async (req: Request, res: Response, next: NextFu
   try {
     const params = collectionIdParamSchema.parse(req.params);
     const body = updateCollectionBodySchema.parse(req.body);
-    const existing = await service.getById(params.id);
+    const authUser = req.authUser;
 
-    const auth = ensureAuthorized(req.authUser, existing.userId);
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    const updated = await service.update(params.id, body);
+    const updated = await service.updateForUser(params.id, authUser.id, body);
     res.json({ data: updated });
   } catch (error) {
     next(error);
@@ -111,16 +92,13 @@ export const updateCollection = async (req: Request, res: Response, next: NextFu
 export const deleteCollection = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const params = collectionIdParamSchema.parse(req.params);
-    const existing = await service.getById(params.id);
-    const auth = ensureAuthorized(req.authUser, existing.userId);
+    const authUser = req.authUser;
 
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    await service.delete(params.id);
+    await service.deleteForUser(params.id, authUser.id);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -131,16 +109,13 @@ export const addCollectionSample = async (req: Request, res: Response, next: Nex
   try {
     const params = collectionIdParamSchema.parse(req.params);
     const body = addCollectionSampleBodySchema.parse(req.body);
-    const collection = await service.getById(params.id);
+    const authUser = req.authUser;
 
-    const auth = ensureAuthorized(req.authUser, collection.userId);
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    const created = await service.addSample(params.id, body.sampleId);
+    const created = await service.addSampleForUser(params.id, authUser.id, body.sampleId);
     res.status(201).json({ data: created });
   } catch (error) {
     next(error);
@@ -151,16 +126,13 @@ export const reorderCollectionSamples = async (req: Request, res: Response, next
   try {
     const params = collectionIdParamSchema.parse(req.params);
     const body = reorderCollectionSamplesBodySchema.parse(req.body);
-    const collection = await service.getById(params.id);
+    const authUser = req.authUser;
 
-    const auth = ensureAuthorized(req.authUser, collection.userId);
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    const updated = await service.reorderSamples(params.id, body);
+    const updated = await service.reorderSamplesForUser(params.id, authUser.id, body);
     res.json({ data: updated });
   } catch (error) {
     next(error);
@@ -171,17 +143,94 @@ export const removeCollectionSample = async (req: Request, res: Response, next: 
   try {
     const params = collectionIdParamSchema.parse(req.params);
     const sampleParams = collectionSampleParamSchema.parse(req.params);
-    const collection = await service.getById(params.id);
+    const authUser = req.authUser;
 
-    const auth = ensureAuthorized(req.authUser, collection.userId);
-    if (!auth.allowed) {
-      return res
-        .status(auth.reason === 'unauthorized' ? 401 : 403)
-        .json({ error: { message: auth.reason === 'unauthorized' ? 'Unauthorized' : 'Forbidden' } });
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
     }
 
-    const updated = await service.removeSample(params.id, sampleParams.sampleId);
+    const updated = await service.removeSampleForUser(params.id, authUser.id, sampleParams.sampleId);
     res.json({ data: updated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listCollectionMembers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const params = collectionIdParamSchema.parse(req.params);
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const members = await service.listMembers(params.id, authUser.id);
+    res.json({ data: members, count: members.length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const inviteCollectionMember = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const params = collectionIdParamSchema.parse(req.params);
+    const body = createCollectionMemberBodySchema.parse(req.body);
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const member = await service.inviteMember(params.id, authUser.id, {
+      name: body.name,
+      role: body.role,
+    });
+    res.status(201).json({ data: member });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateCollectionMemberRole = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const params = collectionIdParamSchema.parse(req.params);
+    const memberParams = collectionMemberIdParamSchema.parse(req.params);
+    const body = updateCollectionMemberBodySchema.parse(req.body);
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    const member = await service.updateMemberRole(
+      params.id,
+      authUser.id,
+      memberParams.memberId,
+      body.role,
+    );
+    res.json({ data: member });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeCollectionMember = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const params = collectionIdParamSchema.parse(req.params);
+    const memberParams = collectionMemberIdParamSchema.parse(req.params);
+    const authUser = req.authUser;
+
+    if (!authUser) {
+      return res.status(401).json({ error: { message: 'Unauthorized' } });
+    }
+
+    await service.removeMember(params.id, authUser.id, memberParams.memberId);
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

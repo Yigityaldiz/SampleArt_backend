@@ -3,14 +3,10 @@ import { NotFoundError } from '../../errors';
 import { UserRepository } from './repository';
 import type { UserResponse } from './schemas';
 import { prisma } from '../../lib/prisma';
-import { CleanupTaskService, cleanupTaskService } from '../cleanup';
+import type { CleanupTaskService } from '../cleanup';
+import { cleanupTaskService } from '../cleanup';
 import { isSupportedLanguageCode } from './languages';
 import type { SupportedLanguageCode } from './languages';
-import {
-  ProfileStatusValue,
-  resolveProfileStatusFromName,
-  sanitizeOptionalName,
-} from './name';
 
 const toSupportedLocale = (value: string | null | undefined): SupportedLanguageCode | null => {
   if (typeof value !== 'string') {
@@ -20,45 +16,11 @@ const toSupportedLocale = (value: string | null | undefined): SupportedLanguageC
   return isSupportedLanguageCode(value) ? value : null;
 };
 
-const emailPrefix = (email: string | null): string | null => {
-  if (typeof email !== 'string') {
-    return null;
-  }
-
-  const prefix = email.split('@')[0]?.trim();
-  return prefix && prefix.length > 0 ? prefix : null;
-};
-
-const toDisplayName = (params: { name: string | null; email: string | null; id: string }): string => {
-  const { name, email, id } = params;
-  if (name) {
-    return name;
-  }
-
-  const fallbackFromEmail = emailPrefix(email);
-  if (fallbackFromEmail) {
-    return fallbackFromEmail;
-  }
-
-  return `user-${id.slice(0, 6)}`;
-};
-
-const requiredFieldsForStatus = (status: ProfileStatusValue): string[] => {
-  return status === 'INCOMPLETE' ? ['name'] : [];
-};
-
 const toResponse = (user: User): UserResponse => {
-  const email = typeof user.email === 'string' ? user.email : null;
-  const sanitizedName = sanitizeOptionalName(user.name) ?? null;
-  const profileStatus = resolveProfileStatusFromName(sanitizedName);
-
   return {
     id: user.id,
-    email,
-    name: sanitizedName,
-    displayName: toDisplayName({ name: sanitizedName, email, id: user.id }),
-    profileStatus,
-    requiredFields: requiredFieldsForStatus(profileStatus),
+    email: typeof user.email === 'string' ? user.email : null,
+    name: typeof user.name === 'string' ? user.name : null,
     locale: toSupportedLocale(user.locale),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -86,31 +48,12 @@ export class UserService {
   }
 
   async create(data: Prisma.UserCreateInput): Promise<UserResponse> {
-    const sanitizedName = sanitizeOptionalName((data as { name?: string | null }).name ?? null) ?? null;
-    const profileStatus = resolveProfileStatusFromName(sanitizedName);
-
-    const created = await this.repo.create({
-      ...data,
-      name: sanitizedName,
-      profileStatus,
-    });
+    const created = await this.repo.create(data);
     return toResponse(created);
   }
 
   async update(id: string, data: Prisma.UserUpdateInput): Promise<UserResponse> {
-    const sanitizedName = sanitizeOptionalName((data as { name?: string | null }).name);
-
-    const updateInput: Prisma.UserUpdateInput = {
-      ...data,
-    };
-
-    if (sanitizedName !== undefined) {
-      const normalizedName = sanitizedName ?? null;
-      updateInput.name = normalizedName;
-      updateInput.profileStatus = resolveProfileStatusFromName(normalizedName);
-    }
-
-    const updated = await this.repo.update(id, updateInput);
+    const updated = await this.repo.update(id, data);
     return toResponse(updated);
   }
 

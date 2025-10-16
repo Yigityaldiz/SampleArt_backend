@@ -1,4 +1,5 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { CollectionRole } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 
 const sampleSelect = {
@@ -44,6 +45,23 @@ export type CollectionSampleWithRelations = Prisma.CollectionSampleGetPayload<{
 
 type CollectionCreateData = Prisma.CollectionUncheckedCreateInput;
 type CollectionUpdateData = Prisma.CollectionUpdateInput;
+type CollectionMemberCreateData = Prisma.CollectionMemberUncheckedCreateInput;
+
+const memberUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  profileStatus: true,
+  locale: true,
+} satisfies Prisma.UserSelect;
+
+export type CollectionMemberWithUser = Prisma.CollectionMemberGetPayload<{
+  include: {
+    user: {
+      select: typeof memberUserSelect;
+    };
+  };
+}>;
 
 export class CollectionRepository {
   constructor(private readonly db: PrismaClient = prisma) {}
@@ -51,12 +69,17 @@ export class CollectionRepository {
   list(params: { userId?: string; skip?: number; take?: number } = {}): Promise<CollectionWithRelations[]> {
     const { userId, skip = 0, take = 25 } = params;
 
+    const where: Prisma.CollectionWhereInput = {
+      isDeleted: false,
+      deletedAt: null,
+    };
+
+    if (userId) {
+      where.OR = [{ userId }, { members: { some: { userId } } }];
+    }
+
     return this.db.collection.findMany({
-      where: {
-        userId,
-        isDeleted: false,
-        deletedAt: null,
-      },
+      where,
       include: defaultInclude,
       orderBy: { updatedAt: 'desc' },
       skip,
@@ -71,8 +94,20 @@ export class CollectionRepository {
     });
   }
 
-  create(data: CollectionCreateData): Promise<CollectionWithRelations> {
-    return this.db.collection.create({ data, include: defaultInclude });
+  async create(data: CollectionCreateData): Promise<CollectionWithRelations> {
+    return this.db.$transaction(async (tx) => {
+      const collection = await tx.collection.create({ data, include: defaultInclude });
+
+      await tx.collectionMember.create({
+        data: {
+          collectionId: collection.id,
+          userId: data.userId,
+          role: CollectionRole.OWNER,
+        },
+      });
+
+      return collection;
+    });
   }
 
   update(id: string, data: CollectionUpdateData): Promise<CollectionWithRelations> {
@@ -165,7 +200,102 @@ export class CollectionRepository {
       },
     });
   }
+
+  findMembership(collectionId: string, userId: string): Promise<CollectionMemberWithUser | null> {
+    return this.db.collectionMember.findFirst({
+      where: {
+        collectionId,
+        userId,
+      },
+      include: {
+        user: {
+          select: memberUserSelect,
+        },
+      },
+    });
+  }
+
+  findMembershipById(id: string): Promise<CollectionMemberWithUser | null> {
+    return this.db.collectionMember.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: memberUserSelect,
+        },
+      },
+    });
+  }
+
+  listMembers(collectionId: string): Promise<CollectionMemberWithUser[]> {
+    return this.db.collectionMember.findMany({
+      where: {
+        collectionId,
+      },
+      include: {
+        user: {
+          select: memberUserSelect,
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  createMembership(data: CollectionMemberCreateData): Promise<CollectionMemberWithUser> {
+    return this.db.collectionMember.create({
+      data,
+      include: {
+        user: {
+          select: memberUserSelect,
+        },
+      },
+    });
+  }
+
+  updateMembershipRole(id: string, role: CollectionRole): Promise<CollectionMemberWithUser> {
+    return this.db.collectionMember.update({
+      where: { id },
+      data: { role },
+      include: {
+        user: {
+          select: memberUserSelect,
+        },
+      },
+    });
+  }
+
+  async deleteMembership(id: string): Promise<void> {
+    await this.db.collectionMember.delete({
+      where: { id },
+    });
+  }
+
+  async isUserMemberOfSample(params: {
+    userId: string;
+    sampleId: string;
+    collectionId?: string;
+  }): Promise<boolean> {
+    const { userId, sampleId, collectionId } = params;
+    const membership = await this.db.collectionMember.findFirst({
+      where: {
+        userId,
+        ...(collectionId ? { collectionId } : {}),
+        collection: {
+          isDeleted: false,
+          deletedAt: null,
+          samples: {
+            some: {
+              sampleId,
+              ...(collectionId ? { collectionId } : {}),
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(membership);
+  }
 }
 
 export const collectionInclude = defaultInclude;
-export type { CollectionCreateData, CollectionUpdateData };
+export type { CollectionCreateData, CollectionUpdateData, CollectionMemberCreateData };

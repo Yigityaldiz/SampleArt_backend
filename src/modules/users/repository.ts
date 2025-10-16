@@ -22,6 +22,11 @@ export class UserRepository {
       where: { email, deletedAt: null },
     });
   }
+  findByName(name: string) {
+    return this.db.user.findFirst({
+      where: { name, deletedAt: null },
+    });
+  }
 
   list(params: { skip?: number; take?: number } = {}) {
     const { skip = 0, take = 25 } = params;
@@ -64,7 +69,6 @@ export const defaultUserSelect: Prisma.UserSelect = {
   id: true,
   email: true,
   name: true,
-  profileStatus: true,
   locale: true,
   createdAt: true,
   updatedAt: true,

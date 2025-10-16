@@ -1,7 +1,3 @@
-// SAMPLE ART — Final schema.prisma
-// PostgreSQL (local → AWS S3 uyumlu)
-// Clerk + Prisma backend
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,26 +7,144 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// PostgreSQL extension requirement for citext (applied via migration):
-///   CREATE EXTENSION IF NOT EXISTS citext;
-
-//////////////////////////////////////////////////////////
-// USERS (Clerk)
-//////////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
 model User {
-  id         String      @id                     // Clerk user_id (ör. user_abc123)
-  email      String?     @unique @db.Citext      // Case-insensitive, unique email
-  name       String?
-  profileStatus ProfileStatus @default(INCOMPLETE)
-  locale     String?
-  deletedAt  DateTime?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-
-  samples     Sample[]
-  collections Collection[]
+  id                    String             @id
+  email                 String?            @unique @db.Citext
+  name                  String?
+  locale                String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  deletedAt             DateTime?
+  profileStatus         ProfileStatus      @default(INCOMPLETE)
+  collectionMemberships CollectionMember[]
+  collections           Collection[]
+  samples               Sample[]
 
   @@map("users")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model Collection {
+  id        String             @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  deletedAt DateTime?
+  isDeleted Boolean            @default(false)
+  members   CollectionMember[]
+  samples   CollectionSample[]
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, updatedAt])
+  @@map("collections")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model Sample {
+  id              String             @id @default(cuid())
+  userId          String
+  title           String
+  materialType    String
+  applicationArea String?
+  surface         String?
+  colorHex        String?            @db.Char(7)
+  colorName       String?
+  companyName     String?
+  priceMinor      Int?
+  priceCurrency   String?            @db.Char(3)
+  quantityValue   Decimal?           @db.Decimal(10, 2)
+  quantityUnit    String?
+  sizeText        String?
+  locationLat     Decimal?           @db.Decimal(9, 6)
+  locationLng     Decimal?           @db.Decimal(9, 6)
+  notes           String?
+  isDeleted       Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
+  collections     CollectionSample[]
+  image           SampleImage?
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@index([isDeleted])
+  @@map("samples")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model SampleImage {
+  id              String    @id @default(cuid())
+  sampleId        String    @unique
+  storageProvider String
+  objectKey       String
+  url             String
+  width           Int?
+  height          Int?
+  blurhash        String?
+  exif            Json?
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+  sample          Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("sample_images")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model CollectionSample {
+  collectionId String
+  sampleId     String
+  position     Int
+  addedAt      DateTime   @default(now())
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sample       Sample     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, sampleId])
+  @@index([collectionId, position])
+  @@map("collection_samples")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model CollectionMember {
+  id           String         @id @default(cuid())
+  collectionId String
+  userId       String
+  role         CollectionRole
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  collection   Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, userId], map: "collection_members_collection_id_user_id_key")
+  @@index([collectionId, role], map: "collection_members_collection_id_role_idx")
+  @@index([userId], map: "collection_members_user_id_idx")
+  @@map("collection_members")
+}
+
+/// ///////////////////////////////////////////////////////
+/// ///////////////////////////////////////////////////////
+model CleanupTask {
+  id          String        @id @default(cuid())
+  entityType  CleanupEntity
+  entityId    String
+  payload     Json?
+  status      CleanupStatus @default(PENDING)
+  attempts    Int           @default(0)
+  scheduledAt DateTime      @default(now())
+  lastError   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, scheduledAt])
+  @@map("cleanup_tasks")
 }
 
 enum ProfileStatus {
@@ -38,116 +152,10 @@ enum ProfileStatus {
   COMPLETE
 }
 
-//////////////////////////////////////////////////////////
-// COLLECTIONS
-//////////////////////////////////////////////////////////
-model Collection {
-  id         String      @id @default(cuid())
-  userId     String
-  name       String
-  isDeleted  Boolean     @default(false)
-  deletedAt  DateTime?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-
-  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  samples CollectionSample[]
-
-  @@unique([userId, name])
-  @@index([userId, updatedAt])
-  @@map("collections")
-}
-
-//////////////////////////////////////////////////////////
-// SAMPLES
-//////////////////////////////////////////////////////////
-model Sample {
-  id               String       @id @default(cuid())
-  userId           String
-  title            String
-  materialType     String
-  applicationArea  String?
-  surface          String?
-  colorHex         String?      @db.Char(7)
-  colorName        String?
-  companyName      String?
-  priceMinor       Int?
-  priceCurrency    String?      @db.Char(3)       // TRY, USD, EUR — backend validation
-  quantityValue    Decimal?     @db.Decimal(10, 2)
-  quantityUnit     String?                        // sqm, m, piece — backend validation
-  sizeText         String?
-  locationLat      Decimal?     @db.Decimal(9, 6)
-  locationLng      Decimal?     @db.Decimal(9, 6)
-  notes            String?
-  isDeleted        Boolean      @default(false)
-  deletedAt        DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  image       SampleImage?
-  collections CollectionSample[]
-
-  @@index([userId, updatedAt])
-  @@index([isDeleted])
-  @@map("samples")
-}
-
-//////////////////////////////////////////////////////////
-// SAMPLE IMAGES (1:1)
-//////////////////////////////////////////////////////////
-model SampleImage {
-  id               String     @id @default(cuid())
-  sampleId         String     @unique
-  storageProvider  String
-  objectKey        String
-  url              String
-  width            Int?
-  height           Int?
-  blurhash         String?
-  exif             Json?
-  deletedAt        DateTime?
-  createdAt        DateTime   @default(now())
-
-  sample Sample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
-
-  @@map("sample_images")
-}
-
-//////////////////////////////////////////////////////////
-// COLLECTION ↔ SAMPLES (N:N)
-//////////////////////////////////////////////////////////
-model CollectionSample {
-  collectionId String
-  sampleId     String
-  position     Int
-  addedAt      DateTime @default(now())
-
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  sample     Sample     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
-
-  @@id([collectionId, sampleId])
-  @@index([collectionId, position])
-  @@map("collection_samples")
-}
-
-//////////////////////////////////////////////////////////
-// CLEANUP TASKS
-//////////////////////////////////////////////////////////
-model CleanupTask {
-  id          String         @id @default(cuid())
-  entityType  CleanupEntity
-  entityId    String
-  payload     Json?
-  status      CleanupStatus  @default(PENDING)
-  attempts    Int            @default(0)
-  scheduledAt DateTime       @default(now())
-  lastError   String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  @@index([status, scheduledAt])
-  @@map("cleanup_tasks")
+enum CollectionRole {
+  OWNER
+  EDITOR
+  VIEW_ONLY
 }
 
 enum CleanupEntity {

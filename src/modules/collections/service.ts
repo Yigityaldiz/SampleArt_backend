@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, CollectionRole, type ProfileStatus } from '@prisma/client';
 import { HttpError, NotFoundError } from '../../errors';
 import {
   CollectionRepository,
@@ -6,6 +6,8 @@ import {
   type CollectionCreateData,
   type CollectionUpdateData,
   type CollectionSampleWithRelations,
+  type CollectionMemberWithUser,
+  type CollectionMemberCreateData,
 } from './repository';
 import type {
   CreateCollectionBody,
@@ -14,10 +16,10 @@ import type {
   ReorderCollectionSamplesBody,
 } from './schemas';
 import { SampleRepository } from '../samples/repository';
+import { UserRepository } from '../users/repository';
+import { sanitizeOptionalName } from '../users/name';
 
-const isPrismaKnownRequestError = (
-  error: unknown,
-): error is Prisma.PrismaClientKnownRequestError =>
+const isPrismaKnownRequestError = (error: unknown): error is Prisma.PrismaClientKnownRequestError =>
   error instanceof Prisma.PrismaClientKnownRequestError;
 
 export interface CollectionSampleSummary {
@@ -70,14 +72,92 @@ const toResponse = (collection: CollectionWithRelations): CollectionResponse => 
   updatedAt: collection.updatedAt.toISOString(),
 });
 
+type MemberRole = CollectionRole;
+
+const MEMBER_ROLE_VALUES: MemberRole[] = [
+  CollectionRole.OWNER,
+  CollectionRole.EDITOR,
+  CollectionRole.VIEW_ONLY,
+];
+
+const MANAGE_CONTENT_ROLES: MemberRole[] = [CollectionRole.OWNER, CollectionRole.EDITOR];
+const MANAGE_META_ROLES: MemberRole[] = [CollectionRole.OWNER];
+
+type NonOwnerMemberRole = Extract<MemberRole, 'EDITOR' | 'VIEW_ONLY'>;
+
+const isAssignableMemberRole = (role: MemberRole): role is NonOwnerMemberRole =>
+  role === CollectionRole.EDITOR || role === CollectionRole.VIEW_ONLY;
+
+const toDisplayName = (params: {
+  id: string;
+  email: string | null | undefined;
+  name: string | null | undefined;
+}): string => {
+  const sanitizedName: string | null | undefined = sanitizeOptionalName(params.name);
+  if (typeof sanitizedName === 'string' && sanitizedName.length > 0) {
+    return sanitizedName;
+  }
+
+  const email = typeof params.email === 'string' ? params.email : null;
+  if (email) {
+    const prefix = email.split('@')[0]?.trim();
+    if (prefix) {
+      return prefix;
+    }
+  }
+
+  return `user-${params.id.slice(0, 6)}`;
+};
+
+export interface CollectionMemberResponse {
+  id: string;
+  collectionId: string;
+  userId: string;
+  role: MemberRole;
+  user: {
+    id: string;
+    email: string | null;
+    name: string | null;
+    displayName: string;
+    profileStatus: ProfileStatus;
+    locale: string | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+const toMemberResponse = (member: CollectionMemberWithUser): CollectionMemberResponse => {
+  const email = typeof member.user.email === 'string' ? member.user.email : null;
+  const sanitizedName: string | null | undefined = sanitizeOptionalName(member.user.name);
+
+  return {
+    id: member.id,
+    collectionId: member.collectionId,
+    userId: member.userId,
+    role: member.role,
+    user: {
+      id: member.user.id,
+      email,
+      name: sanitizedName ?? null,
+      displayName: toDisplayName({ id: member.user.id, email, name: sanitizedName ?? null }),
+      profileStatus: member.user.profileStatus,
+      locale: typeof member.user.locale === 'string' ? member.user.locale : null,
+    },
+    createdAt: member.createdAt.toISOString(),
+    updatedAt: member.updatedAt.toISOString(),
+  };
+};
+
 export class CollectionService {
   constructor(
     private readonly repo = new CollectionRepository(),
     private readonly sampleRepo = new SampleRepository(),
+    private readonly userRepo = new UserRepository(),
   ) {}
 
   async list(params: ListCollectionsQuery = {}): Promise<CollectionResponse[]> {
     const { includeSamples: _includeSamples, ...rest } = params;
+    void _includeSamples;
     const collections = await this.repo.list(rest);
     return collections.map(toResponse);
   }
@@ -91,6 +171,15 @@ export class CollectionService {
     return toResponse(collection);
   }
 
+  async getForUser(collectionId: string, userId: string): Promise<CollectionResponse> {
+    const { collection } = await this.ensureCollectionRole(
+      collectionId,
+      userId,
+      MEMBER_ROLE_VALUES,
+    );
+    return toResponse(collection);
+  }
+
   async create(data: CreateCollectionBody & { userId: string }): Promise<CollectionResponse> {
     const payload: CollectionCreateData = {
       userId: data.userId,
@@ -101,7 +190,13 @@ export class CollectionService {
     return toResponse(created);
   }
 
-  async update(id: string, data: UpdateCollectionBody): Promise<CollectionResponse> {
+  async updateForUser(
+    id: string,
+    userId: string,
+    data: UpdateCollectionBody,
+  ): Promise<CollectionResponse> {
+    await this.ensureCollectionRole(id, userId, MANAGE_META_ROLES);
+
     try {
       const payload: CollectionUpdateData = {
         ...data,
@@ -112,19 +207,48 @@ export class CollectionService {
       if (isPrismaKnownRequestError(error) && error.code === 'P2025') {
         throw new NotFoundError('Collection not found');
       }
-      throw error;
+      throw (error instanceof Error ? error : new Error(String(error)));
     }
   }
 
-  async delete(id: string): Promise<void> {
+  async deleteForUser(id: string, userId: string): Promise<void> {
+    await this.ensureCollectionRole(id, userId, MANAGE_META_ROLES);
+
     try {
       await this.repo.delete(id);
     } catch (error: unknown) {
       if (isPrismaKnownRequestError(error) && error.code === 'P2025') {
         throw new NotFoundError('Collection not found');
       }
-      throw error;
+      throw (error instanceof Error ? error : new Error(String(error)));
     }
+  }
+
+  async addSampleForUser(
+    collectionId: string,
+    userId: string,
+    sampleId: string,
+  ): Promise<CollectionSampleSummary> {
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_CONTENT_ROLES);
+    return this.addSample(collectionId, sampleId);
+  }
+
+  async removeSampleForUser(
+    collectionId: string,
+    userId: string,
+    sampleId: string,
+  ): Promise<CollectionResponse> {
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_CONTENT_ROLES);
+    return this.removeSample(collectionId, sampleId);
+  }
+
+  async reorderSamplesForUser(
+    collectionId: string,
+    userId: string,
+    body: ReorderCollectionSamplesBody,
+  ): Promise<CollectionResponse> {
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_CONTENT_ROLES);
+    return this.reorderSamples(collectionId, body);
   }
 
   async addSample(collectionId: string, sampleId: string): Promise<CollectionSampleSummary> {
@@ -143,8 +267,9 @@ export class CollectionService {
       throw new NotFoundError('Sample not found');
     }
 
-    if (sample.userId !== collection.userId) {
-      throw new HttpError(403, 'Sample belongs to another user');
+    const sampleOwnerMembership = await this.repo.findMembership(collectionId, sample.userId);
+    if (!sampleOwnerMembership) {
+      throw new HttpError(403, 'Sample owner is not a member of the collection');
     }
 
     const position = await this.repo.getNextSamplePosition(collectionId);
@@ -166,7 +291,12 @@ export class CollectionService {
     await this.repo.removeCollectionSample(collectionId, sampleId);
     await this.normalizePositions(collectionId);
 
-    return this.getById(collectionId);
+    const updated = await this.repo.findById(collectionId);
+    if (!updated) {
+      throw new NotFoundError('Collection not found');
+    }
+
+    return toResponse(updated);
   }
 
   async reorderSamples(
@@ -200,7 +330,122 @@ export class CollectionService {
     const updates = ordered.map((sampleId, index) => ({ sampleId, position: index + 1 }));
     await this.repo.updateSamplePositions(collectionId, updates);
 
-    return this.getById(collectionId);
+    const updated = await this.repo.findById(collectionId);
+    if (!updated) {
+      throw new NotFoundError('Collection not found');
+    }
+
+    return toResponse(updated);
+  }
+
+  async listMembers(collectionId: string, userId: string): Promise<CollectionMemberResponse[]> {
+    await this.ensureCollectionRole(collectionId, userId, MEMBER_ROLE_VALUES);
+    const members = await this.repo.listMembers(collectionId);
+    return members.map(toMemberResponse);
+  }
+
+  async inviteMember(
+    collectionId: string,
+    userId: string,
+    payload: { name: string; role: MemberRole },
+  ): Promise<CollectionMemberResponse> {
+    if (!isAssignableMemberRole(payload.role)) {
+      throw new HttpError(400, 'Role must be EDITOR or VIEW_ONLY');
+    }
+
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_META_ROLES);
+
+    const sanitizedTargetName = sanitizeOptionalName(payload.name);
+    if (!sanitizedTargetName) {
+      throw new HttpError(400, 'Valid member name is required');
+    }
+
+    const existingUser = await this.userRepo.findByName(sanitizedTargetName);
+    if (!existingUser) {
+      throw new NotFoundError('User not found');
+    }
+
+    const membershipData: CollectionMemberCreateData = {
+      collectionId,
+      userId: existingUser.id,
+      role: payload.role,
+    };
+
+    try {
+      const created = await this.repo.createMembership(membershipData);
+      return toMemberResponse(created);
+    } catch (error: unknown) {
+      if (isPrismaKnownRequestError(error) && error.code === 'P2002') {
+        throw new HttpError(409, 'User is already a member of this collection');
+      }
+      throw (error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  async updateMemberRole(
+    collectionId: string,
+    userId: string,
+    memberId: string,
+    role: MemberRole,
+  ): Promise<CollectionMemberResponse> {
+    if (!isAssignableMemberRole(role)) {
+      throw new HttpError(400, 'Role must be EDITOR or VIEW_ONLY');
+    }
+
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_META_ROLES);
+
+    const membership = await this.repo.findMembershipById(memberId);
+    if (!membership || membership.collectionId !== collectionId) {
+      throw new NotFoundError('Membership not found');
+    }
+
+    if (membership.role === CollectionRole.OWNER) {
+      throw new HttpError(400, 'Owner role cannot be changed');
+    }
+
+    if (membership.role === role) {
+      return toMemberResponse(membership);
+    }
+
+    const updated = await this.repo.updateMembershipRole(memberId, role);
+    return toMemberResponse(updated);
+  }
+
+  async removeMember(collectionId: string, userId: string, memberId: string): Promise<void> {
+    await this.ensureCollectionRole(collectionId, userId, MANAGE_META_ROLES);
+
+    const membership = await this.repo.findMembershipById(memberId);
+    if (!membership || membership.collectionId !== collectionId) {
+      throw new NotFoundError('Membership not found');
+    }
+
+    if (membership.role === CollectionRole.OWNER) {
+      throw new HttpError(400, 'Cannot remove the owner from the collection');
+    }
+
+    await this.repo.deleteMembership(memberId);
+  }
+
+  private async ensureCollectionRole(
+    collectionId: string,
+    userId: string,
+    allowedRoles: MemberRole[],
+  ): Promise<{ collection: CollectionWithRelations; membership: CollectionMemberWithUser }> {
+    const collection = await this.repo.findById(collectionId);
+    if (!collection) {
+      throw new NotFoundError('Collection not found');
+    }
+
+    const membership = await this.repo.findMembership(collectionId, userId);
+    if (!membership) {
+      throw new HttpError(403, 'Forbidden');
+    }
+
+    if (!allowedRoles.includes(membership.role)) {
+      throw new HttpError(403, 'Insufficient permissions');
+    }
+
+    return { collection, membership };
   }
 
   private async normalizePositions(collectionId: string) {

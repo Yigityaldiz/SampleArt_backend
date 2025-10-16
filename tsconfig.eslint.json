@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src", "prisma/**/*.ts"]
+  "include": ["src", "prisma/**/*.ts", "vitest.config.mts"]
 }

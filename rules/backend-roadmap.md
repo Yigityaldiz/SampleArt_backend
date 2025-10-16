@@ -69,6 +69,7 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 - [x] Koleksiyona sample eklerken `CollectionSample.position` değerini üret
 - [x] Drag-and-drop / yeniden sıralama durumlarında position normalizasyonu stratejisi oluştur
 - [x] Koleksiyon ↔ sample ilişkileri için testleri yaz
+- [x] Workspace RBAC katmanını (Owner/Editor/ViewOnly) ve üyelik/davet akışını uygula
 
 ## Phase 4 – Yerel Geliştirme Destekleri
 

@@ -94,7 +94,7 @@ const toSampleResponse = (sample: SampleWithRelations): SampleResponse => ({
   notes: sample.notes ?? null,
   isDeleted: sample.isDeleted,
   image: toImageResponse(sample.image ?? null),
-  collections: sample.collections.map((item: any) => ({
+  collections: sample.collections.map((item) => ({
     collectionId: item.collectionId,
     position: item.position ?? null,
   })),
@@ -176,6 +176,7 @@ export class SampleService {
 
   async create(body: CreateSampleBody): Promise<SampleResponse> {
     const { collectionIds: _collectionIds, ...rest } = body;
+    void _collectionIds;
     const data: Prisma.SampleUncheckedCreateInput = {
       userId: rest.userId,
       title: rest.title,

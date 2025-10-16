@@ -10,14 +10,12 @@ async function main() {
     update: {
       email: 'admin@sampleart.local',
       name: 'Seed Admin',
-      profileStatus: 'COMPLETE',
       locale: 'tr-TR',
     },
     create: {
       id: userId,
       email: 'admin@sampleart.local',
       name: 'Seed Admin',
-      profileStatus: 'COMPLETE',
       locale: 'tr-TR',
     },
   });
@@ -44,7 +42,7 @@ async function main() {
     },
   });
 
-  await prisma.collection.upsert({
+  const collection = await prisma.collection.upsert({
     where: { id: 'collection-seed' },
     update: {},
     create: {
@@ -57,6 +55,21 @@ async function main() {
           position: 1,
         },
       },
+    },
+  });
+
+  await prisma.collectionMember.upsert({
+    where: { id: 'collection-seed-owner' },
+    update: {
+      role: 'OWNER',
+      collectionId: collection.id,
+      userId: defaultUser.id,
+    },
+    create: {
+      id: 'collection-seed-owner',
+      collectionId: collection.id,
+      userId: defaultUser.id,
+      role: 'OWNER',
     },
   });
 }

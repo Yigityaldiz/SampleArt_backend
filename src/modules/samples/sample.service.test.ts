@@ -2,17 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { SampleService } from './service';
 import { NotFoundError } from '../../errors';
+import type { SampleRepository, SampleWithRelations } from './repository';
+import type { CleanupTaskService } from '../cleanup';
+import type { CreateSampleBody, UpdateSampleBody } from './schemas';
 
-const loggerMock = vi.hoisted(() => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  child: vi.fn().mockReturnThis(),
-}));
-
-vi.mock('../../lib/logger', () => ({
-  logger: loggerMock,
+vi.mock('../cleanup', () => ({
+  CleanupTaskService: vi.fn(),
 }));
 
 const date = new Date('2024-01-01T00:00:00.000Z');
@@ -27,13 +22,13 @@ describe('SampleService', () => {
     update: vi.fn(),
     softDelete: vi.fn(),
     markImageDeleted: vi.fn(),
-  };
+  } satisfies Record<string, ReturnType<typeof vi.fn>>;
 
   const cleanupTasks = {
     enqueueSampleCleanup: vi.fn(),
-  };
+  } satisfies Record<string, ReturnType<typeof vi.fn>>;
 
-  const sampleWithRelations = {
+  const sampleWithRelations: SampleWithRelations = {
     id: 'sample_1',
     userId: 'user_1',
     title: 'Marble Tile',
@@ -76,9 +71,12 @@ describe('SampleService', () => {
     ],
     createdAt: date,
     updatedAt: date,
-  } as any;
+  };
 
-  const service = new SampleService(repo as any, cleanupTasks as any);
+  const service = new SampleService(
+    repo as unknown as SampleRepository,
+    cleanupTasks as unknown as CleanupTaskService,
+  );
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -119,7 +117,7 @@ describe('SampleService', () => {
   it('creates sample and uppercases currency', async () => {
     repo.create.mockResolvedValue(sampleWithRelations);
 
-    const body = {
+    const body: CreateSampleBody = {
       userId: 'user_1',
       title: 'Marble Tile',
       materialType: 'tile',
@@ -132,11 +130,11 @@ describe('SampleService', () => {
         objectKey: 'sample/object.jpg',
         url: 'https://example.com/object.jpg',
       },
-    } as any;
+    };
 
     await service.create(body);
 
-    const payload = repo.create.mock.calls[0][0];
+    const payload = repo.create.mock.calls[0]?.[0] as Prisma.SampleUncheckedCreateInput;
     expect(payload.priceCurrency).toBe('TRY');
     expect(payload.quantityValue).toBeInstanceOf(Prisma.Decimal);
     expect(payload.locationLat).toBeInstanceOf(Prisma.Decimal);
@@ -147,7 +145,7 @@ describe('SampleService', () => {
     repo.findById.mockResolvedValue(sampleWithRelations);
     repo.update.mockResolvedValue(sampleWithRelations);
 
-    const body = {
+    const body: UpdateSampleBody = {
       title: 'Updated',
       priceCurrency: 'usd',
       quantityValue: '9.5',
@@ -156,11 +154,11 @@ describe('SampleService', () => {
         objectKey: 'sample/new.jpg',
         url: 'https://example.com/new.jpg',
       },
-    } as any;
+    };
 
     await service.update('sample_1', body);
 
-    const payload = repo.update.mock.calls[0][1];
+    const payload = repo.update.mock.calls[0]?.[1] as Prisma.SampleUncheckedUpdateInput;
     expect(repo.findById).toHaveBeenCalledWith('sample_1');
     expect(payload.priceCurrency).toBe('USD');
     expect(payload.image?.upsert).toBeDefined();
@@ -169,7 +167,9 @@ describe('SampleService', () => {
   it('throws NotFoundError when updating missing sample', async () => {
     repo.findById.mockResolvedValue(null);
 
-    await expect(service.update('missing', {} as any)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.update('missing', { title: 'Missing' })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 
   it('soft deletes sample', async () => {

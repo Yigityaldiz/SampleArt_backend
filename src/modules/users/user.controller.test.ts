@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const serviceMocks = vi.hoisted(() => ({
@@ -24,10 +24,16 @@ import type { AuthUser } from '../auth';
 import { NotFoundError } from '../../errors';
 
 const createResponse = () => {
-  const res: Partial<Response> = {};
-  res.status = vi.fn().mockReturnValue(res);
-  res.json = vi.fn().mockReturnValue(res);
-  return res as Response;
+  const res = {} as Response;
+  const status = vi.fn<Response['status']>().mockReturnValue(res);
+  const json = vi.fn<Response['json']>().mockReturnValue(res);
+
+  Object.assign(res, {
+    status,
+    json,
+  });
+
+  return { res, status, json };
 };
 
 const createAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
@@ -35,18 +41,6 @@ const createAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   roles: ['user'],
   ...overrides,
 });
-
-const baseUserResponse = {
-  id: 'user_1',
-  email: 'foo@example.com',
-  name: 'Foo',
-  displayName: 'Foo',
-  profileStatus: 'COMPLETE' as const,
-  requiredFields: [] as string[],
-  locale: 'en',
-  createdAt: '2024-01-01T00:00:00.000Z',
-  updatedAt: '2024-01-01T00:00:00.000Z',
-};
 
 describe('Users controller', () => {
   beforeEach(() => {
@@ -58,16 +52,16 @@ describe('Users controller', () => {
       query: { take: '5' },
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
-    serviceMocks.getById.mockResolvedValue(baseUserResponse);
+    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
 
     await listUsers(req, res, next);
 
     expect(serviceMocks.list).not.toHaveBeenCalled();
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
-    expect(res.json).toHaveBeenCalledWith({ data: [baseUserResponse] });
+    expect(json).toHaveBeenCalledWith({ data: [{ id: 'user_1' }] });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -76,15 +70,15 @@ describe('Users controller', () => {
       query: { take: '5' },
       authUser: createAuthUser({ roles: ['admin'] }),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
-    serviceMocks.list.mockResolvedValue([baseUserResponse]);
+    serviceMocks.list.mockResolvedValue([{ id: 'user_1' }]);
 
     await listUsers(req, res, next);
 
     expect(serviceMocks.list).toHaveBeenCalledWith({ take: 5, skip: 0 });
-    expect(res.json).toHaveBeenCalledWith({ data: [baseUserResponse] });
+    expect(json).toHaveBeenCalledWith({ data: [{ id: 'user_1' }] });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -93,14 +87,14 @@ describe('Users controller', () => {
       params: { id: 'user_1' },
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
-    serviceMocks.getById.mockResolvedValue(baseUserResponse);
+    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
 
     await getUser(req, res, next);
 
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
-    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -114,9 +108,9 @@ describe('Users controller', () => {
       },
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, status, json } = createResponse();
     const next = vi.fn();
-    serviceMocks.create.mockResolvedValue(baseUserResponse);
+    serviceMocks.create.mockResolvedValue({ id: 'user_1' });
 
     await createUser(req, res, next);
 
@@ -126,8 +120,8 @@ describe('Users controller', () => {
       name: 'Foo',
       locale: 'en',
     });
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
+    expect(status).toHaveBeenCalledWith(201);
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
   });
 
   it('calls next when service throws', async () => {
@@ -136,7 +130,7 @@ describe('Users controller', () => {
       body: { email: 'foo@example.com' },
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res } = createResponse();
     const next = vi.fn();
     const error = new Error('boom');
     serviceMocks.update.mockRejectedValue(error);
@@ -146,48 +140,18 @@ describe('Users controller', () => {
     expect(next).toHaveBeenCalledWith(error);
   });
 
-  it('normalizes name input before updating a user', async () => {
-    const req = {
-      params: { id: 'user_1' },
-      body: { name: '  New   Name  ' },
-      authUser: createAuthUser({ roles: ['admin'] }),
-    } as unknown as Request;
-    const res = createResponse();
-    const next = vi.fn();
-
-    serviceMocks.update.mockResolvedValue({
-      ...baseUserResponse,
-      name: 'New Name',
-      displayName: 'New Name',
-    });
-
-    await updateUser(req, res, next);
-
-    expect(serviceMocks.update).toHaveBeenCalledWith('user_1', {
-      name: 'New Name',
-    });
-    expect(res.json).toHaveBeenCalledWith({
-      data: {
-        ...baseUserResponse,
-        name: 'New Name',
-        displayName: 'New Name',
-      },
-    });
-    expect(next).not.toHaveBeenCalled();
-  });
-
   it('forbids accessing other users', async () => {
     const req = {
       params: { id: 'user_2' },
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, status, json } = createResponse();
     const next = vi.fn();
 
     await getUser(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: { message: 'Forbidden' } });
+    expect(status).toHaveBeenCalledWith(403);
+    expect(json).toHaveBeenCalledWith({ error: { message: 'Forbidden' } });
     expect(serviceMocks.getById).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
@@ -196,37 +160,28 @@ describe('Users controller', () => {
     const req = {
       authUser: createAuthUser(),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
-    serviceMocks.getById.mockResolvedValue(baseUserResponse);
+    serviceMocks.getById.mockResolvedValue({ id: 'user_1' });
 
     await getCurrentUser(req, res, next);
 
     expect(serviceMocks.getById).toHaveBeenCalledWith('user_1');
     expect(serviceMocks.create).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith({ data: baseUserResponse });
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_1' } });
     expect(next).not.toHaveBeenCalled();
   });
 
   it('lazily creates current user when missing', async () => {
     const req = {
-      authUser: createAuthUser({
-        id: 'user_missing',
-        roles: ['user'],
-        name: '  Missing   Name  ',
-      }),
+      authUser: createAuthUser({ id: 'user_missing', roles: ['user'], name: 'Missing' }),
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
     serviceMocks.getById.mockRejectedValue(new NotFoundError('User not found'));
-    serviceMocks.create.mockResolvedValue({
-      ...baseUserResponse,
-      id: 'user_missing',
-      name: 'Missing Name',
-      displayName: 'Missing Name',
-    });
+    serviceMocks.create.mockResolvedValue({ id: 'user_missing' });
 
     await getCurrentUser(req, res, next);
 
@@ -234,17 +189,10 @@ describe('Users controller', () => {
     expect(serviceMocks.create).toHaveBeenCalledWith({
       id: 'user_missing',
       email: undefined,
-      name: 'Missing Name',
+      name: 'Missing',
       locale: undefined,
     });
-    expect(res.json).toHaveBeenCalledWith({
-      data: {
-        ...baseUserResponse,
-        id: 'user_missing',
-        name: 'Missing Name',
-        displayName: 'Missing Name',
-      },
-    });
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_missing' } });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -253,15 +201,15 @@ describe('Users controller', () => {
       authUser: createAuthUser(),
       body: { locale: 'en' },
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
-    serviceMocks.update.mockResolvedValue({ ...baseUserResponse, locale: 'en' });
+    serviceMocks.update.mockResolvedValue({ id: 'user_1', locale: 'en' });
 
     await updateCurrentUserLanguage(req, res, next);
 
     expect(serviceMocks.update).toHaveBeenCalledWith('user_1', { locale: 'en' });
-    expect(res.json).toHaveBeenCalledWith({ data: { ...baseUserResponse, locale: 'en' } });
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'en' } });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -270,13 +218,13 @@ describe('Users controller', () => {
       authUser: createAuthUser({ email: 'user@example.com', name: 'User' }),
       body: { locale: 'tr' },
     } as unknown as Request;
-    const res = createResponse();
+    const { res, json } = createResponse();
     const next = vi.fn();
 
     serviceMocks.update
       .mockRejectedValueOnce({ code: 'P2025' })
-      .mockResolvedValueOnce({ ...baseUserResponse, locale: 'tr' });
-    serviceMocks.create.mockResolvedValue(baseUserResponse);
+      .mockResolvedValueOnce({ id: 'user_1', locale: 'tr' });
+    serviceMocks.create.mockResolvedValue({ id: 'user_1' });
 
     await updateCurrentUserLanguage(req, res, next);
 
@@ -287,7 +235,7 @@ describe('Users controller', () => {
       locale: 'tr',
     });
     expect(serviceMocks.update).toHaveBeenCalledTimes(2);
-    expect(res.json).toHaveBeenCalledWith({ data: { ...baseUserResponse, locale: 'tr' } });
+    expect(json).toHaveBeenCalledWith({ data: { id: 'user_1', locale: 'tr' } });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -296,7 +244,7 @@ describe('Users controller', () => {
       authUser: createAuthUser(),
       body: { locale: 'en' },
     } as unknown as Request;
-    const res = createResponse();
+    const { res } = createResponse();
     const next = vi.fn();
     const error = new Error('boom');
 
@@ -313,14 +261,14 @@ describe('Users controller', () => {
       authUser: undefined,
       body: { locale: 'en' },
     } as unknown as Request;
-    const res = createResponse();
+    const { res, status, json } = createResponse();
     const next = vi.fn();
 
     await updateCurrentUserLanguage(req, res, next);
 
     expect(serviceMocks.update).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: { message: 'Unauthorized' } });
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({ error: { message: 'Unauthorized' } });
     expect(next).not.toHaveBeenCalled();
   });
 });
