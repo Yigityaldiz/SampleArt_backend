@@ -43,6 +43,10 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default(process.env.NODE_ENV === 'production' ? 'true' : 'false')
     .transform((value) => value === 'true'),
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
+  IOS_APP_IDS: z.string().optional(),
+  IOS_APP_PATHS: z.string().optional(),
+  IOS_DEEP_LINK_SCHEME: z.string().min(1).default('sampleart'),
 });
 
 const parsed = EnvSchema.parse({
@@ -63,6 +67,10 @@ const parsed = EnvSchema.parse({
   HTTPS_KEY_PATH: process.env.HTTPS_KEY_PATH,
   HTTPS_CA_PATH: process.env.HTTPS_CA_PATH,
   FORCE_HTTPS_REDIRECT: process.env.FORCE_HTTPS_REDIRECT,
+  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS,
+  IOS_APP_IDS: process.env.IOS_APP_IDS,
+  IOS_APP_PATHS: process.env.IOS_APP_PATHS,
+  IOS_DEEP_LINK_SCHEME: process.env.IOS_DEEP_LINK_SCHEME,
 });
 
 if ((parsed.HTTPS_CERT_PATH && !parsed.HTTPS_KEY_PATH) || (!parsed.HTTPS_CERT_PATH && parsed.HTTPS_KEY_PATH)) {
@@ -79,6 +87,16 @@ export const env = {
   cleanupPollIntervalMs: parsed.CLEANUP_POLL_INTERVAL_MS ?? 60_000,
   httpsEnabled: Boolean(parsed.HTTPS_CERT_PATH && parsed.HTTPS_KEY_PATH),
   forceHttpsRedirect: parsed.FORCE_HTTPS_REDIRECT,
+  corsAllowedOrigins: parsed.CORS_ALLOWED_ORIGINS
+    ? parsed.CORS_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter((origin) => origin.length > 0)
+    : null,
+  iosAppIds: parsed.IOS_APP_IDS
+    ? parsed.IOS_APP_IDS.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+    : ['TEAMID.com.sampleart.app'],
+  iosAppPaths: parsed.IOS_APP_PATHS
+    ? parsed.IOS_APP_PATHS.split(',').map((path) => path.trim()).filter((path) => path.length > 0)
+    : ['/invite/*'],
+  iosDeepLinkScheme: parsed.IOS_DEEP_LINK_SCHEME,
 };
 
 export type AppEnvironment = typeof env;

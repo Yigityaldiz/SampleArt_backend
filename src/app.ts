@@ -41,7 +41,17 @@ export const createApp = () => {
     }),
   );
   app.use(helmet());
-  app.use(cors());
+
+  if (env.corsAllowedOrigins && env.corsAllowedOrigins.length > 0) {
+    app.use(
+      cors({
+        origin: env.corsAllowedOrigins,
+        credentials: true,
+      }),
+    );
+  } else {
+    app.use(cors());
+  }
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -75,6 +85,35 @@ export const createApp = () => {
   app.use('/collections', collectionsRouter);
   app.use('/uploads', uploadsRouter);
   app.use('/invites', invitesRouter);
+
+  const sendAasa = (res: express.Response) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.json({
+      applinks: {
+        apps: [] as string[],
+        details: [
+          {
+            appIDs: env.iosAppIds,
+            paths: env.iosAppPaths,
+          },
+        ],
+      },
+    });
+  };
+
+  app.get('/apple-app-site-association', (_req, res) => {
+    sendAasa(res);
+  });
+  app.get('/.well-known/apple-app-site-association', (_req, res) => {
+    sendAasa(res);
+  });
+
+  app.get('/invite/:token', (req, res) => {
+    const token = req.params.token ?? '';
+    const redirectUrl = `${env.iosDeepLinkScheme}://invite/${encodeURIComponent(token)}`;
+    res.redirect(redirectUrl);
+  });
 
   app.use(notFoundHandler);
   app.use(errorHandler);
