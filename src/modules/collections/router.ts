@@ -10,10 +10,10 @@ import {
   removeCollectionSample,
   reorderCollectionSamples,
   listCollectionMembers,
-  inviteCollectionMember,
   updateCollectionMemberRole,
   removeCollectionMember,
 } from './controller';
+import { createCollectionInvite } from '../invites/controller';
 
 const router = Router();
 
@@ -28,7 +28,7 @@ router.post('/:id/samples', addCollectionSample);
 router.patch('/:id/samples/reorder', reorderCollectionSamples);
 router.delete('/:id/samples/:sampleId', removeCollectionSample);
 router.get('/:id/members', listCollectionMembers);
-router.post('/:id/members', inviteCollectionMember);
+router.post('/:id/invites', createCollectionInvite);
 router.patch('/:id/members/:memberId', updateCollectionMemberRole);
 router.delete('/:id/members/:memberId', removeCollectionMember);
 

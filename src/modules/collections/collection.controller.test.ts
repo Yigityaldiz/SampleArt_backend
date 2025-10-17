@@ -12,7 +12,6 @@ const serviceMocks = vi.hoisted(() => ({
   removeSampleForUser: vi.fn(),
   reorderSamplesForUser: vi.fn(),
   listMembers: vi.fn(),
-  inviteMember: vi.fn(),
   updateMemberRole: vi.fn(),
   removeMember: vi.fn(),
 }));
@@ -31,7 +30,6 @@ import {
   removeCollectionSample,
   reorderCollectionSamples,
   listCollectionMembers,
-  inviteCollectionMember,
   updateCollectionMemberRole,
   removeCollectionMember,
 } from './controller';
@@ -206,24 +204,6 @@ describe('Collections controller', () => {
 
     expect(serviceMocks.listMembers).toHaveBeenCalledWith('col_1', 'user_1');
     expect(json).toHaveBeenCalledWith({ data: [{ id: 'mem_1' }], count: 1 });
-  });
-
-  it('invites member', async () => {
-    serviceMocks.inviteMember.mockResolvedValue({ id: 'mem_2' });
-    const req = {
-      params: { id: 'col_1' },
-      body: { name: 'User Two', role: 'EDITOR' },
-      authUser: { id: 'user_1', roles: ['user'] },
-    } as unknown as Request;
-    const { res, status } = createResponse();
-
-    await inviteCollectionMember(req, res, vi.fn());
-
-    expect(serviceMocks.inviteMember).toHaveBeenCalledWith('col_1', 'user_1', {
-      name: 'User Two',
-      role: 'EDITOR',
-    });
-    expect(status).toHaveBeenCalledWith(201);
   });
 
   it('updates member role', async () => {

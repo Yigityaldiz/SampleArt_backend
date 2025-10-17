@@ -72,6 +72,52 @@ async function main() {
       role: 'OWNER',
     },
   });
+
+  const invite = await prisma.invite.upsert({
+    where: { token: 'seed_invite_token' },
+    update: {
+      collectionId: collection.id,
+      inviterId: defaultUser.id,
+      role: 'VIEW_ONLY',
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    create: {
+      collectionId: collection.id,
+      inviterId: defaultUser.id,
+      role: 'VIEW_ONLY',
+      token: 'seed_invite_token',
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.auditLog.upsert({
+    where: { id: 'audit_seed_invite_created' },
+    update: {
+      actorId: defaultUser.id,
+      action: 'INVITE_CREATED',
+      collectionId: collection.id,
+      targetUserId: null,
+      inviteId: invite.id,
+      metadata: {
+        token: invite.token,
+        role: invite.role,
+      },
+    },
+    create: {
+      id: 'audit_seed_invite_created',
+      actorId: defaultUser.id,
+      action: 'INVITE_CREATED',
+      collectionId: collection.id,
+      targetUserId: null,
+      inviteId: invite.id,
+      metadata: {
+        token: invite.token,
+        role: invite.role,
+      },
+    },
+  });
 }
 
 main()

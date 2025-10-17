@@ -7,7 +7,6 @@ import {
   type CollectionUpdateData,
   type CollectionSampleWithRelations,
   type CollectionMemberWithUser,
-  type CollectionMemberCreateData,
 } from './repository';
 import type {
   CreateCollectionBody,
@@ -16,7 +15,6 @@ import type {
   ReorderCollectionSamplesBody,
 } from './schemas';
 import { SampleRepository } from '../samples/repository';
-import { UserRepository } from '../users/repository';
 import { sanitizeOptionalName } from '../users/name';
 
 const isPrismaKnownRequestError = (error: unknown): error is Prisma.PrismaClientKnownRequestError =>
@@ -82,6 +80,12 @@ const MEMBER_ROLE_VALUES: MemberRole[] = [
 
 const MANAGE_CONTENT_ROLES: MemberRole[] = [CollectionRole.OWNER, CollectionRole.EDITOR];
 const MANAGE_META_ROLES: MemberRole[] = [CollectionRole.OWNER];
+
+const ROLE_PRIORITY: Record<MemberRole, number> = {
+  [CollectionRole.VIEW_ONLY]: 1,
+  [CollectionRole.EDITOR]: 2,
+  [CollectionRole.OWNER]: 3,
+};
 
 type NonOwnerMemberRole = Extract<MemberRole, 'EDITOR' | 'VIEW_ONLY'>;
 
@@ -152,7 +156,6 @@ export class CollectionService {
   constructor(
     private readonly repo = new CollectionRepository(),
     private readonly sampleRepo = new SampleRepository(),
-    private readonly userRepo = new UserRepository(),
   ) {}
 
   async list(params: ListCollectionsQuery = {}): Promise<CollectionResponse[]> {
@@ -344,42 +347,44 @@ export class CollectionService {
     return members.map(toMemberResponse);
   }
 
-  async inviteMember(
+  async assertCollectionRole(
     collectionId: string,
     userId: string,
-    payload: { name: string; role: MemberRole },
-  ): Promise<CollectionMemberResponse> {
-    if (!isAssignableMemberRole(payload.role)) {
-      throw new HttpError(400, 'Role must be EDITOR or VIEW_ONLY');
+    allowedRoles: MemberRole[],
+  ): Promise<void> {
+    await this.ensureCollectionRole(collectionId, userId, allowedRoles);
+  }
+
+  async ensureMembershipFromInvite(
+    collectionId: string,
+    userId: string,
+    role: MemberRole,
+  ): Promise<MemberRole> {
+    const membership = await this.repo.findMembership(collectionId, userId);
+
+    if (!membership) {
+      const created = await this.repo.createMembership({
+        collectionId,
+        userId,
+        role,
+      });
+
+      return created.role;
     }
 
-    await this.ensureCollectionRole(collectionId, userId, MANAGE_META_ROLES);
-
-    const sanitizedTargetName = sanitizeOptionalName(payload.name);
-    if (!sanitizedTargetName) {
-      throw new HttpError(400, 'Valid member name is required');
+    if (membership.role === CollectionRole.OWNER) {
+      return membership.role;
     }
 
-    const existingUser = await this.userRepo.findByName(sanitizedTargetName);
-    if (!existingUser) {
-      throw new NotFoundError('User not found');
+    const currentPriority = ROLE_PRIORITY[membership.role];
+    const desiredPriority = ROLE_PRIORITY[role];
+
+    if (desiredPriority > currentPriority) {
+      const updated = await this.repo.updateMembershipRole(membership.id, role);
+      return updated.role;
     }
 
-    const membershipData: CollectionMemberCreateData = {
-      collectionId,
-      userId: existingUser.id,
-      role: payload.role,
-    };
-
-    try {
-      const created = await this.repo.createMembership(membershipData);
-      return toMemberResponse(created);
-    } catch (error: unknown) {
-      if (isPrismaKnownRequestError(error) && error.code === 'P2002') {
-        throw new HttpError(409, 'User is already a member of this collection');
-      }
-      throw (error instanceof Error ? error : new Error(String(error)));
-    }
+    return membership.role;
   }
 
   async updateMemberRole(

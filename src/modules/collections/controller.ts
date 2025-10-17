@@ -8,7 +8,6 @@ import {
   addCollectionSampleBodySchema,
   reorderCollectionSamplesBodySchema,
   collectionSampleParamSchema,
-  createCollectionMemberBodySchema,
   updateCollectionMemberBodySchema,
   collectionMemberIdParamSchema,
 } from './schemas';
@@ -167,26 +166,6 @@ export const listCollectionMembers = async (req: Request, res: Response, next: N
 
     const members = await service.listMembers(params.id, authUser.id);
     res.json({ data: members, count: members.length });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const inviteCollectionMember = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const params = collectionIdParamSchema.parse(req.params);
-    const body = createCollectionMemberBodySchema.parse(req.body);
-    const authUser = req.authUser;
-
-    if (!authUser) {
-      return res.status(401).json({ error: { message: 'Unauthorized' } });
-    }
-
-    const member = await service.inviteMember(params.id, authUser.id, {
-      name: body.name,
-      role: body.role,
-    });
-    res.status(201).json({ data: member });
   } catch (error) {
     next(error);
   }

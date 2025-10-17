@@ -5,10 +5,12 @@ import { createApp } from './app';
 import { env } from './config';
 import { logger } from './lib/logger';
 import { CleanupScheduler } from './modules/cleanup';
+import { inviteExpirationScheduler } from './modules/invites';
 
 const app = createApp();
 const cleanupScheduler = new CleanupScheduler();
 cleanupScheduler.start();
+inviteExpirationScheduler.start();
 
 const createServer = () => {
   if (!env.httpsEnabled) {
@@ -54,6 +56,7 @@ server.listen(env.PORT, () => {
 const shutdown = (signal: NodeJS.Signals) => {
   logger.info({ signal }, 'Received shutdown signal');
   cleanupScheduler.stop();
+  inviteExpirationScheduler.stop();
   server.close((error) => {
     if (error) {
       logger.error({ err: error }, 'Error during graceful shutdown');

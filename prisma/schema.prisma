@@ -21,6 +21,10 @@ model User {
   collectionMemberships CollectionMember[]
   collections           Collection[]
   samples               Sample[]
+  sentInvites           Invite[]           @relation("invite_inviter")
+  receivedInvites       Invite[]           @relation("invite_invitee")
+  auditLogs             AuditLog[]         @relation("audit_actor")
+  auditLogTargets       AuditLog[]         @relation("audit_target_user")
 
   @@map("users")
 }
@@ -38,6 +42,8 @@ model Collection {
   members   CollectionMember[]
   samples   CollectionSample[]
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invites   Invite[]
+  auditLogs AuditLog[]
 
   @@unique([userId, name])
   @@index([userId, updatedAt])
@@ -158,6 +164,13 @@ enum CollectionRole {
   VIEW_ONLY
 }
 
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
 enum CleanupEntity {
   SAMPLE
   USER
@@ -168,4 +181,45 @@ enum CleanupStatus {
   RUNNING
   FAILED
   COMPLETED
+}
+
+model Invite {
+  id              String         @id @default(cuid())
+  collectionId    String         @map("collection_id")
+  inviterId       String         @map("inviter_id")
+  inviteeUserId   String?        @map("invitee_user_id")
+  inviteeUsername String?        @map("invitee_username")
+  inviteeEmail    String?        @db.Citext @map("invitee_email")
+  role            CollectionRole
+  token           String         @unique
+  status          InviteStatus   @default(PENDING)
+  expiresAt       DateTime       @map("expires_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  inviter    User       @relation("invite_inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee    User?      @relation("invite_invitee", fields: [inviteeUserId], references: [id])
+  auditLogs  AuditLog[]
+
+  @@index([collectionId, status])
+  @@map("invites")
+}
+
+model AuditLog {
+  id           String    @id @default(cuid())
+  actorId      String    @map("actor_id")
+  action       String
+  collectionId String?   @map("collection_id")
+  targetUserId String?   @map("target_user_id")
+  inviteId     String?   @map("invite_id")
+  metadata     Json?     @map("metadata")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  actor        User        @relation("audit_actor", fields: [actorId], references: [id], onDelete: Cascade)
+  targetUser   User?       @relation("audit_target_user", fields: [targetUserId], references: [id])
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  invite       Invite?     @relation(fields: [inviteId], references: [id])
+
+  @@map("audit_logs")
 }

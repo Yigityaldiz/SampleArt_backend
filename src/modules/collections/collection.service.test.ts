@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Prisma, CollectionRole, ProfileStatus } from '@prisma/client';
+import { CollectionRole, ProfileStatus } from '@prisma/client';
 import { CollectionService } from './service';
 import { NotFoundError } from '../../errors';
 import type { CollectionRepository } from './repository';
 import type { SampleRepository } from '../samples/repository';
-import type { UserRepository } from '../users/repository';
 
 const sanitizeOptionalNameMock = vi.hoisted(() =>
   vi.fn((value: string | null | undefined) => value ?? null),
@@ -101,17 +100,12 @@ describe('CollectionService', () => {
     findById: vi.fn(),
   } satisfies Record<string, ReturnType<typeof vi.fn>>;
 
-  const userRepo = {
-    findByName: vi.fn(),
-  } satisfies Record<string, ReturnType<typeof vi.fn>>;
-
   let service: CollectionService;
 
   beforeEach(() => {
     vi.resetAllMocks();
     Object.values(repo).forEach((mock) => mock.mockReset());
     sampleRepo.findById.mockReset();
-    userRepo.findByName.mockReset();
     sanitizeOptionalNameMock.mockReset();
     sanitizeOptionalNameMock.mockImplementation((value: string | null | undefined) => value ?? null);
 
@@ -133,12 +127,9 @@ describe('CollectionService', () => {
       id: 'sample_2',
       userId: ownerUser.id,
     });
-    userRepo.findByName.mockResolvedValue(editorUser);
-
     service = new CollectionService(
       repo as unknown as CollectionRepository,
       sampleRepo as unknown as SampleRepository,
-      userRepo as unknown as UserRepository,
     );
   });
 
@@ -214,47 +205,6 @@ describe('CollectionService', () => {
         statusCode: 403,
       },
     );
-  });
-
-  it('invites member after verifying user existence', async () => {
-    repo.createMembership.mockResolvedValueOnce({
-      ...editorMembership,
-    });
-
-    const member = await service.inviteMember('col_1', ownerUser.id, {
-      name: editorUser.name,
-      role: CollectionRole.EDITOR,
-    });
-
-    expect(userRepo.findByName).toHaveBeenCalledWith(editorUser.name);
-    expect(member.role).toBe(CollectionRole.EDITOR);
-  });
-
-  it('rejects invite for non-existent user', async () => {
-    userRepo.findByName.mockResolvedValueOnce(null);
-
-    await expect(
-      service.inviteMember('col_1', ownerUser.id, {
-        name: 'Missing User',
-        role: CollectionRole.EDITOR,
-      }),
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it('maps unique constraint to 409 on invite', async () => {
-    const prismaError = new Prisma.PrismaClientKnownRequestError('duplicate', {
-      clientVersion: '6.16.3',
-      code: 'P2002',
-    });
-
-    repo.createMembership.mockRejectedValueOnce(prismaError);
-
-    await expect(
-      service.inviteMember('col_1', ownerUser.id, {
-        name: editorUser.name,
-        role: CollectionRole.VIEW_ONLY,
-      }),
-    ).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('prevents removing collection owner membership', async () => {

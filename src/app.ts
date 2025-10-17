@@ -11,6 +11,7 @@ import { usersRouter } from './modules/users';
 import { samplesRouter } from './modules/samples';
 import { collectionsRouter } from './modules/collections';
 import { uploadsRouter } from './modules/uploads';
+import { invitesRouter } from './modules/invites';
 import { logger } from './lib/logger';
 import { env } from './config';
 import { clerkAuthMiddleware, mockAuthMiddleware } from './modules/auth';
@@ -73,6 +74,7 @@ export const createApp = () => {
   app.use('/samples', samplesRouter);
   app.use('/collections', collectionsRouter);
   app.use('/uploads', uploadsRouter);
+  app.use('/invites', invitesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

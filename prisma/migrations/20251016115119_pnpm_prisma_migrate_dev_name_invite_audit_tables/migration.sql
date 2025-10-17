@@ -1,0 +1,3 @@
+-- Legacy placeholder migration kept for history. All schema changes were superseded
+-- by later migration `20251106120000_invite_audit_tables`. This migration intentionally
+-- performs no operations.
