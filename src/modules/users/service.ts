@@ -33,9 +33,21 @@ export class UserService {
     private readonly cleanupTasks: CleanupTaskService = cleanupTaskService,
   ) {}
 
-  async list(params: { skip?: number; take?: number } = {}): Promise<UserResponse[]> {
+  async list(params: { skip?: number; take?: number; search?: string } = {}): Promise<UserResponse[]> {
     const users = await this.repo.list(params);
     return users.map(toResponse);
+  }
+
+  async listWithCount(params: { skip?: number; take?: number; search?: string } = {}) {
+    const [users, total] = await Promise.all([
+      this.repo.list(params),
+      this.repo.count({ search: params.search }),
+    ]);
+
+    return {
+      items: users.map(toResponse),
+      total,
+    };
   }
 
   async getById(id: string): Promise<UserResponse> {

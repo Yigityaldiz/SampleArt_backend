@@ -1,4 +1,4 @@
-export type AuthRole = 'admin' | 'user' | 'viewer';
+export type AuthRole = 'admin' | 'user' | 'viewer' | 'seller';
 
 import type { SupportedLanguageCode } from '../users/languages';
 

@@ -40,6 +40,8 @@ export interface SampleResponse {
   locationLng?: number | null;
   notes?: string | null;
   isDeleted: boolean;
+  isPublic: boolean;
+  publishedAt: string | null;
   image?: SampleImageResponse | null;
   collections: Array<{
     collectionId: string;
@@ -93,6 +95,8 @@ const toSampleResponse = (sample: SampleWithRelations): SampleResponse => ({
   locationLng: toNumber(sample.locationLng),
   notes: sample.notes ?? null,
   isDeleted: sample.isDeleted,
+  isPublic: sample.isPublic,
+  publishedAt: sample.publishedAt ? sample.publishedAt.toISOString() : null,
   image: toImageResponse(sample.image ?? null),
   collections: sample.collections.map((item) => ({
     collectionId: item.collectionId,
@@ -194,6 +198,8 @@ export class SampleService {
       locationLat: decimalOrUndefined(rest.locationLat),
       locationLng: decimalOrUndefined(rest.locationLng),
       notes: rest.notes,
+      isPublic: rest.isPublic ?? false,
+      publishedAt: rest.isPublic ? new Date() : undefined,
       image: rest.image ? { create: mapImageCreate(rest.image) } : undefined,
     };
 
@@ -224,8 +230,13 @@ export class SampleService {
       locationLng: decimalOrUndefined(body.locationLng),
       notes: body.notes,
       isDeleted: body.isDeleted,
+      isPublic: body.isPublic,
       image: buildImageMutation(body.image),
     };
+
+    if (body.isPublic !== undefined) {
+      data.publishedAt = body.isPublic ? existing.publishedAt ?? new Date() : null;
+    }
 
     const updated = await this.repo.update(id, data);
     return toSampleResponse(updated);

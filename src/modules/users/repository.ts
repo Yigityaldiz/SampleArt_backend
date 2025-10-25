@@ -28,14 +28,47 @@ export class UserRepository {
     });
   }
 
-  list(params: { skip?: number; take?: number } = {}) {
-    const { skip = 0, take = 25 } = params;
+  list(params: { skip?: number; take?: number; search?: string } = {}) {
+    const { skip = 0, take = 25, search } = params;
+
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+    };
+
+    if (search && search.trim().length > 0) {
+      const query = search.trim();
+      where.OR = [
+        { email: { contains: query, mode: 'insensitive' } },
+        { name: { contains: query, mode: 'insensitive' } },
+        { id: { contains: query } },
+      ];
+    }
+
     return this.db.user.findMany({
-      where: { deletedAt: null },
+      where,
       skip,
       take,
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  count(params: { search?: string } = {}) {
+    const { search } = params;
+
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+    };
+
+    if (search && search.trim().length > 0) {
+      const query = search.trim();
+      where.OR = [
+        { email: { contains: query, mode: 'insensitive' } },
+        { name: { contains: query, mode: 'insensitive' } },
+        { id: { contains: query } },
+      ];
+    }
+
+    return this.db.user.count({ where });
   }
 
   create(data: UserCreateInput) {

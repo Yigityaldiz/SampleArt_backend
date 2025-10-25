@@ -57,6 +57,7 @@ const baseSampleBodySchema = z.object({
   locationLat: decimalLike.optional(),
   locationLng: decimalLike.optional(),
   notes: z.string().optional(),
+  isPublic: z.boolean().optional(),
   image: sampleImageInputSchema.optional(),
 });
 

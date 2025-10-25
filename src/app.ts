@@ -12,9 +12,12 @@ import { samplesRouter } from './modules/samples';
 import { collectionsRouter } from './modules/collections';
 import { uploadsRouter } from './modules/uploads';
 import { invitesRouter } from './modules/invites';
+import { sellerApplicationsRouter } from './modules/seller-applications';
 import { logger } from './lib/logger';
 import { env } from './config';
-import { clerkAuthMiddleware, mockAuthMiddleware } from './modules/auth';
+import { clerkAuthMiddleware, mockAuthMiddleware, authRouter } from './modules/auth';
+import { adminRouter } from './modules/admin';
+import { catalogRouter } from './modules/catalog';
 
 export const createApp = () => {
   const app = express();
@@ -80,11 +83,15 @@ export const createApp = () => {
   }
 
   app.use('/health', healthRouter);
+  app.use('/auth', authRouter);
+  app.use('/catalog', catalogRouter);
+  app.use('/admin', adminRouter);
   app.use('/users', usersRouter);
   app.use('/samples', samplesRouter);
   app.use('/collections', collectionsRouter);
   app.use('/uploads', uploadsRouter);
   app.use('/invites', invitesRouter);
+  app.use('/seller-applications', sellerApplicationsRouter);
 
   const sendAasa = (res: express.Response) => {
     res.setHeader('Content-Type', 'application/json');

@@ -20,6 +20,39 @@ async function main() {
     },
   });
 
+  await prisma.sellerProfile.upsert({
+    where: { userId: defaultUser.id },
+    update: {
+      companyName: 'Local Studio',
+      brandName: 'SampleArt Originals',
+      productCategories: ['seramik', 'mermer'],
+      countryCode: 'TR',
+      contactName: 'Seed Admin',
+      contactPhone: '+90 555 000 0000',
+      contactEmail: 'admin@sampleart.local',
+      taxId: '1234567890',
+      status: 'APPROVED',
+      reviewedById: defaultUser.id,
+      reviewedAt: new Date(),
+      rejectionReason: null,
+    },
+    create: {
+      userId: defaultUser.id,
+      companyName: 'Local Studio',
+      brandName: 'SampleArt Originals',
+      productCategories: ['seramik', 'mermer'],
+      countryCode: 'TR',
+      contactName: 'Seed Admin',
+      contactPhone: '+90 555 000 0000',
+      contactEmail: 'admin@sampleart.local',
+      taxId: '1234567890',
+      status: 'APPROVED',
+      reviewedById: defaultUser.id,
+      reviewedAt: new Date(),
+      rejectionReason: null,
+    },
+  });
+
   const sample = await prisma.sample.create({
     data: {
       userId: defaultUser.id,
@@ -28,6 +61,8 @@ async function main() {
       applicationArea: 'wall',
       colorHex: '#FFFFFF',
       companyName: 'Local Studio',
+      isPublic: true,
+      publishedAt: new Date(),
     },
   });
 

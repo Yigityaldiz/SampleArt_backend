@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { SellerProfileStatus } from '@prisma/client';
 import { HttpError, NotFoundError } from '../../errors';
 import { UserService } from '../users/service';
 import type { AuthUser } from '../auth';
@@ -12,10 +13,12 @@ import {
 } from './schemas';
 import { isSupportedLanguageCode } from '../users/languages';
 import { ensureSampleAccess } from './access';
+import { SellerApplicationService } from '../seller-applications/service';
 
 const service = new SampleService();
 const userService = new UserService();
 const collectionService = new CollectionService();
+const sellerApplicationService = new SellerApplicationService();
 
 const toNullable = <T>(value: T | null | undefined) => (value === undefined ? undefined : value);
 const normalizeLocale = (value: string | null | undefined) =>
@@ -36,6 +39,36 @@ const ensureUserRecord = async (authUser: AuthUser) => {
       locale: toNullable(normalizeLocale(authUser.locale)),
     });
   }
+};
+
+const getSellerProfile = async (userId: string) => {
+  try {
+    return await sellerApplicationService.getForUser(userId);
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+const ensureSellerApproved = async (userId: string) => {
+  const profile = await getSellerProfile(userId);
+
+  if (!profile) {
+    throw new HttpError(403, 'Seller application not found');
+  }
+
+  if (profile.status === SellerProfileStatus.PENDING) {
+    throw new HttpError(403, 'Seller application pending approval');
+  }
+
+  if (profile.status === SellerProfileStatus.REJECTED) {
+    throw new HttpError(403, 'Seller application rejected');
+  }
+
+  return profile;
 };
 
 export const listSamples = async (req: Request, res: Response, next: NextFunction) => {
@@ -145,6 +178,16 @@ export const createSample = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
+    if (body.isPublic === true) {
+      if (isAdmin) {
+        if (targetUserId !== authUser.id) {
+          await ensureSellerApproved(targetUserId);
+        }
+      } else {
+        await ensureSellerApproved(authUser.id);
+      }
+    }
+
     const sample = await service.create({ ...body, userId: targetUserId });
 
     if (collectionIds.length === 0) {
@@ -195,6 +238,16 @@ export const updateSample = async (req: Request, res: Response, next: NextFuncti
     let sample = existing;
 
     if (hasMetadataUpdates) {
+      if (updatePayload.isPublic === true) {
+        if (isAdmin) {
+          if (existing.userId !== authUser.id) {
+            await ensureSellerApproved(existing.userId);
+          }
+        } else {
+          await ensureSellerApproved(authUser.id);
+        }
+      }
+
       sample = await service.update(params.id, updatePayload);
     }
 

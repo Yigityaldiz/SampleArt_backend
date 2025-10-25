@@ -33,7 +33,10 @@ const parseRoles = (raw: string | undefined): AuthRole[] => {
   return raw
     .split(',')
     .map((role) => role.trim())
-    .filter((role): role is AuthRole => role === 'admin' || role === 'user' || role === 'viewer');
+    .filter(
+      (role): role is AuthRole =>
+        role === 'admin' || role === 'user' || role === 'viewer' || role === 'seller',
+    );
 };
 
 export const mockAuthMiddleware: RequestHandler = (req, res, next) => {

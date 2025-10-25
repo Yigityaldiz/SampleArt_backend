@@ -47,6 +47,8 @@ describe('SampleService', () => {
     locationLng: createDecimal('29.654321'),
     notes: 'Test note',
     isDeleted: false,
+    isPublic: true,
+    publishedAt: date,
     deletedAt: null,
     image: {
       id: 'img_1',

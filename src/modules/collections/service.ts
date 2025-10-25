@@ -271,7 +271,7 @@ export class CollectionService {
     }
 
     const sampleOwnerMembership = await this.repo.findMembership(collectionId, sample.userId);
-    if (!sampleOwnerMembership) {
+    if (!sampleOwnerMembership && !sample.isPublic) {
       throw new HttpError(403, 'Sample owner is not a member of the collection');
     }
 
