@@ -1,5 +1,5 @@
 import type { RequestHandler, Response } from 'express';
-import { clerkAuthAdapter, extractTokenFromHeaders } from './clerk';
+import { cognitoAuthAdapter, extractTokenFromHeaders } from './cognito';
 import { logger } from '../../lib/logger';
 
 const unauthorizedResponse = (res: Response) =>
@@ -9,12 +9,12 @@ const unauthorizedResponse = (res: Response) =>
     },
   });
 
-export const clerkAuthMiddleware: RequestHandler = async (req, res, next) => {
+export const cognitoAuthMiddleware: RequestHandler = async (req, res, next) => {
   const headers = req.headers as Record<string, string | string[] | undefined>;
   const { credentialPresent } = extractTokenFromHeaders(headers);
 
   try {
-    const authUser = await clerkAuthAdapter.verifyRequest(headers);
+    const authUser = await cognitoAuthAdapter.verifyRequest(headers);
 
     if (authUser) {
       req.authUser = authUser;
@@ -26,7 +26,7 @@ export const clerkAuthMiddleware: RequestHandler = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.warn({ err: error }, 'Clerk authentication failed');
+    logger.warn({ err: error }, 'Cognito authentication failed');
 
     if (credentialPresent) {
       return unauthorizedResponse(res);

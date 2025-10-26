@@ -16,7 +16,7 @@
 - `src/shared`: Modüller arasında paylaşılan helper'lar, util fonksiyonları, adapterlar ve ortak tipler.
 - `src/modules`: Domain odaklı modüller; her modül kendi alt klasöründe mantığını kapsüller.
 - `src/jobs`: BullMQ iş tanımları ve işleyicileri; kuyruk isimleri burada merkezi yönetilir.
-- `src/lib`: Üçüncü parti entegrasyonlar (S3 client, Clerk SDK wrapper vb.) için ince adapter katmanı.
+- `src/lib`: Üçüncü parti entegrasyonlar (S3 client, Cognito adapter vb.) için ince adapter katmanı.
 - `src/middlewares`: Global veya yeniden kullanılabilir Express middleware'leri.
 - `src/errors`: Custom hata sınıfları ve error handler implementasyonu.
 
@@ -40,4 +40,4 @@
 
 - Modüller arası etkileşim `service` katmanı üzerinden interface'ler aracılığıyla yapılır.
 - Döngüsel bağımlılıklardan kaçınmak için ortak protokoller `src/shared/contracts` altında tutulur.
-- Harici servisler (S3, Clerk, Resend) için lib adapterları dependency injection ile modüllere verilir.
+- Harici servisler (S3, Cognito, Resend) için lib adapterları dependency injection ile modüllere verilir.

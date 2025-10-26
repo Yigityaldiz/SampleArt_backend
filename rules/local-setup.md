@@ -24,7 +24,7 @@ Bu doküman backend'i tamamen yerel kaynaklarla ayağa kaldırmak için gereken 
 DATABASE_URL="postgresql://sample_art:sample_art@localhost:5432/sample_art?schema=public"
 PORT=3000
 UPLOAD_ROOT=storage/uploads
-# Clerk, Resend vb. değerler gerektikçe eklenecek.
+# Cognito, Resend vb. değerler gerektikçe eklenecek.
 ```
 
 > `.env.local` dosyası git'e eklenmez; örnek değerler `.env.example` üzerinden paylaşılır.
@@ -52,7 +52,7 @@ Container durdurma/temizleme:
 3. Şema değişikliklerinden sonra: `pnpm prisma migrate dev --name <migration-adi>`.
 4. İlk kurulumda örnek veri gerekiyorsa `pnpm db:seed` komutunu çalıştırın.
 5. PostgreSQL için `citext` uzantısını ilk migration içine eklemeyi unutmayın: `CREATE EXTENSION IF NOT EXISTS citext;`.
-6. Auth için Clerk kullanacaksanız `.env.local` içine `CLERK_PUBLISHABLE_KEY` ve `CLERK_SECRET_KEY` değerlerini ekleyin; yerelde mock auth devrede kalabilir.
+6. Auth için Cognito User Pool konfigurasyonu gerekiyorsa `.env.local` içine `COGNITO_*` değerlerini ekleyin; lokal/test ortamında mock auth devrede kalabilir.
 
 ## Yerel Upload Dizinleri
 

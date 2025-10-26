@@ -33,8 +33,8 @@
 
 - `helmet`, `cors` ve `express-rate-limit` global middleware olarak tanımlanır.
 - Gizli anahtarlar `.env` yerine Secret Manager/GitHub Secrets üzerinden yönetilir.
-- Auth işlemleri Clerk üzerinden yapılır; backend yalnızca doğrulanmış tokenlarla çalışır.
-- Yerel geliştirmede Clerk yerine mock auth middleware (`x-mock-user-*` header'ları) devreye alınır; production ortamında `CLERK_*` anahtarları set edilerek gerçek doğrulama aktifleştirilir.
+- Auth işlemleri AWS Cognito üzerinden yapılır; backend yalnızca doğrulanmış tokenlarla çalışır.
+- Yerel/test geliştirmede mock auth middleware (`x-mock-user-*` header'ları) devreye alınır; production ortamında Cognito User Pool ayarları (`COGNITO_*`) set edilerek gerçek doğrulama aktifleştirilir.
 
 ## Dosya Yükleme
 

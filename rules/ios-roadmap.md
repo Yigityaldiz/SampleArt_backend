@@ -5,7 +5,7 @@ Bu plan Swift ekibinin S3 tabanlı upload akışını backend ile entegre ederke
 ## 1. Hazırlık & Ortam
 
 - [ ] `API_BASE_URL`, `CDN_BASE_URL` ve AWS bölge bilgilerini proje konfigürasyonuna ekle.
-- [ ] Geliştirme/değerlendirme ortamlarında kullanılacak kullanıcı token’larını hazırla (prod için Clerk Bearer token, dev için `x-mock-user-id`, `x-mock-user-roles`)
+- [ ] Geliştirme/değerlendirme ortamlarında kullanılacak kullanıcı token’larını hazırla (prod için Cognito ID/Access token, dev için `x-mock-user-id`, `x-mock-user-roles`)
 - [ ] Local build’lerde görsel önizlemesi için placeholder asset ve hata görselleri belirle.
 
 ## 2. Pre-signed Upload Akışı

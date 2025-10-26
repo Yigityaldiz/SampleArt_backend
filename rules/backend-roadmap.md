@@ -42,10 +42,10 @@ Bu dosya backend geliştirme sürecindeki görevleri mikro seviyede takip etmek 
 
 ## Phase 3 – Çekirdek Modüller
 
-**Auth (Clerk entegrasyonuna hazırlık)**
+**Auth (Cognito entegrasyonuna hazırlık)**
 
 - [x] Yerel geliştirme için mock auth middleware'i yaz
-- [x] Clerk entegrasyon katmanını hazırlayan adapter (`src/lib/clerk.ts`)
+- [x] Cognito entegrasyon katmanını hazırlayan adapter (`src/modules/auth/clerk.ts` ve `src/lib/cognito.ts`)
 - [x] Auth guard middleware'leri (`requireAuth`, `requireRole`)
 
 **Users Modülü**

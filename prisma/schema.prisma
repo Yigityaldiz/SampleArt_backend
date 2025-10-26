@@ -10,23 +10,23 @@ datasource db {
 /// ///////////////////////////////////////////////////////
 /// ///////////////////////////////////////////////////////
 model User {
-  id                    String             @id
-  email                 String?            @unique @db.Citext
-  name                  String?
-  locale                String?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  deletedAt             DateTime?
-  profileStatus         ProfileStatus      @default(INCOMPLETE)
-  collectionMemberships CollectionMember[]
-  collections           Collection[]
-  samples               Sample[]
-  sentInvites           Invite[]           @relation("invite_inviter")
-  receivedInvites       Invite[]           @relation("invite_invitee")
-  auditLogs             AuditLog[]         @relation("audit_actor")
-  auditLogTargets       AuditLog[]         @relation("audit_target_user")
-  sellerProfile         SellerProfile?
-  reviewedSellerProfiles SellerProfile[]   @relation("seller_profiles_reviewers")
+  id                     String             @id
+  email                  String?            @unique @db.Citext
+  name                   String?
+  locale                 String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt              DateTime?
+  profileStatus          ProfileStatus      @default(INCOMPLETE)
+  auditLogs              AuditLog[]         @relation("audit_actor")
+  auditLogTargets        AuditLog[]         @relation("audit_target_user")
+  collectionMemberships  CollectionMember[]
+  collections            Collection[]
+  receivedInvites        Invite[]           @relation("invite_invitee")
+  sentInvites            Invite[]           @relation("invite_inviter")
+  samples                Sample[]
+  reviewedSellerProfiles SellerProfile[]    @relation("seller_profiles_reviewers")
+  sellerProfile          SellerProfile?
 
   @@map("users")
 }
@@ -41,11 +41,11 @@ model Collection {
   updatedAt DateTime           @updatedAt
   deletedAt DateTime?
   isDeleted Boolean            @default(false)
+  auditLogs AuditLog[]
   members   CollectionMember[]
   samples   CollectionSample[]
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   invites   Invite[]
-  auditLogs AuditLog[]
 
   @@unique([userId, name])
   @@index([userId, updatedAt])
@@ -73,11 +73,11 @@ model Sample {
   locationLng     Decimal?           @db.Decimal(9, 6)
   notes           String?
   isDeleted       Boolean            @default(false)
-  isPublic        Boolean            @default(false)
-  publishedAt     DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   deletedAt       DateTime?
+  isPublic        Boolean            @default(false)
+  publishedAt     DateTime?
   collections     CollectionSample[]
   image           SampleImage?
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -158,6 +158,69 @@ model CleanupTask {
   @@map("cleanup_tasks")
 }
 
+model SellerProfile {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+  companyName       String
+  brandName         String
+  productCategories String[]
+  countryCode       String              @db.VarChar(2)
+  contactName       String
+  contactPhone      String
+  contactEmail      String              @db.Citext
+  taxId             String
+  status            SellerProfileStatus @default(PENDING)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  reviewedBy        User?               @relation("seller_profiles_reviewers", fields: [reviewedById], references: [id])
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("seller_profiles")
+}
+
+model Invite {
+  id              String         @id @default(cuid())
+  collectionId    String         @map("collection_id")
+  inviterId       String         @map("inviter_id")
+  inviteeUserId   String?        @map("invitee_user_id")
+  inviteeUsername String?        @map("invitee_username")
+  inviteeEmail    String?        @map("invitee_email") @db.Citext
+  role            CollectionRole
+  token           String         @unique
+  status          InviteStatus   @default(PENDING)
+  expiresAt       DateTime       @map("expires_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  auditLogs       AuditLog[]
+  collection      Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  invitee         User?          @relation("invite_invitee", fields: [inviteeUserId], references: [id])
+  inviter         User           @relation("invite_inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId, status])
+  @@map("invites")
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorId      String      @map("actor_id")
+  action       String
+  collectionId String?     @map("collection_id")
+  targetUserId String?     @map("target_user_id")
+  inviteId     String?     @map("invite_id")
+  metadata     Json?       @map("metadata")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  actor        User        @relation("audit_actor", fields: [actorId], references: [id], onDelete: Cascade)
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  invite       Invite?     @relation(fields: [inviteId], references: [id])
+  targetUser   User?       @relation("audit_target_user", fields: [targetUserId], references: [id])
+
+  @@map("audit_logs")
+}
+
 enum ProfileStatus {
   INCOMPLETE
   COMPLETE
@@ -188,74 +251,8 @@ enum CleanupStatus {
   COMPLETED
 }
 
-model SellerProfile {
-  id                 String                @id @default(cuid())
-  userId             String
-  companyName        String
-  brandName          String
-  productCategories  String[]              @db.Text
-  countryCode        String                @db.VarChar(2)
-  contactName        String
-  contactPhone       String
-  contactEmail       String                @db.Citext
-  taxId              String
-  status             SellerProfileStatus   @default(PENDING)
-  reviewedById       String?
-  reviewedAt         DateTime?
-  rejectionReason    String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy         User?                 @relation("seller_profiles_reviewers", fields: [reviewedById], references: [id])
-
-  @@unique([userId])
-  @@index([status])
-  @@map("seller_profiles")
-}
-
 enum SellerProfileStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model Invite {
-  id              String         @id @default(cuid())
-  collectionId    String         @map("collection_id")
-  inviterId       String         @map("inviter_id")
-  inviteeUserId   String?        @map("invitee_user_id")
-  inviteeUsername String?        @map("invitee_username")
-  inviteeEmail    String?        @db.Citext @map("invitee_email")
-  role            CollectionRole
-  token           String         @unique
-  status          InviteStatus   @default(PENDING)
-  expiresAt       DateTime       @map("expires_at")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  inviter    User       @relation("invite_inviter", fields: [inviterId], references: [id], onDelete: Cascade)
-  invitee    User?      @relation("invite_invitee", fields: [inviteeUserId], references: [id])
-  auditLogs  AuditLog[]
-
-  @@index([collectionId, status])
-  @@map("invites")
-}
-
-model AuditLog {
-  id           String    @id @default(cuid())
-  actorId      String    @map("actor_id")
-  action       String
-  collectionId String?   @map("collection_id")
-  targetUserId String?   @map("target_user_id")
-  inviteId     String?   @map("invite_id")
-  metadata     Json?     @map("metadata")
-  createdAt    DateTime  @default(now()) @map("created_at")
-
-  actor        User        @relation("audit_actor", fields: [actorId], references: [id], onDelete: Cascade)
-  targetUser   User?       @relation("audit_target_user", fields: [targetUserId], references: [id])
-  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  invite       Invite?     @relation(fields: [inviteId], references: [id])
-
-  @@map("audit_logs")
 }

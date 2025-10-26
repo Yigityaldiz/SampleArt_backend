@@ -2,6 +2,7 @@ import { HttpError, NotFoundError } from '../../errors';
 import { CatalogRepository } from './repository';
 import { SellerApplicationRepository } from '../seller-applications/repository';
 import { CollectionService } from '../collections/service';
+import { publicUrlFor } from '../../lib/s3';
 
 export class CatalogService {
   constructor(
@@ -154,6 +155,7 @@ export class CatalogService {
       createdAt: Date;
       updatedAt: Date;
       image?: {
+        objectKey: string | null;
         url: string;
         width: number | null;
         height: number | null;
@@ -178,6 +180,18 @@ export class CatalogService {
         ? typed.quantityValue.toString()
         : null;
 
+    const image =
+      typed.image && (typed.image.objectKey || typed.image.url)
+        ? {
+            url:
+              typed.image.objectKey && typed.image.objectKey.length > 0
+                ? publicUrlFor(typed.image.objectKey)
+                : typed.image.url,
+            width: typed.image.width,
+            height: typed.image.height,
+          }
+        : null;
+
     return {
       id: typed.id,
       userId: typed.userId,
@@ -194,13 +208,7 @@ export class CatalogService {
       publishedAt: typed.publishedAt ? typed.publishedAt.toISOString() : null,
       createdAt: typed.createdAt.toISOString(),
       updatedAt: typed.updatedAt.toISOString(),
-      image: typed.image
-        ? {
-            url: typed.image.url,
-            width: typed.image.width,
-            height: typed.image.height,
-          }
-        : null,
+      image,
       seller: typed.user?.sellerProfile
         ? {
             id: typed.user.sellerProfile.id,

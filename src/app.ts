@@ -15,9 +15,10 @@ import { invitesRouter } from './modules/invites';
 import { sellerApplicationsRouter } from './modules/seller-applications';
 import { logger } from './lib/logger';
 import { env } from './config';
-import { clerkAuthMiddleware, mockAuthMiddleware, authRouter } from './modules/auth';
+import { cognitoAuthMiddleware, mockAuthMiddleware, authRouter } from './modules/auth';
 import { adminRouter } from './modules/admin';
 import { catalogRouter } from './modules/catalog';
+import { publicRouter } from './modules/public';
 
 export const createApp = () => {
   const app = express();
@@ -76,15 +77,16 @@ export const createApp = () => {
     });
   }
 
-  if (env.isDevelopment) {
+  if (env.isDevelopment || env.isTest) {
     app.use(mockAuthMiddleware);
   } else {
-    app.use(clerkAuthMiddleware);
+    app.use(cognitoAuthMiddleware);
   }
 
   app.use('/health', healthRouter);
   app.use('/auth', authRouter);
   app.use('/catalog', catalogRouter);
+  app.use('/public', publicRouter);
   app.use('/admin', adminRouter);
   app.use('/users', usersRouter);
   app.use('/samples', samplesRouter);

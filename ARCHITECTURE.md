@@ -4,7 +4,7 @@
 
 SampleArt is a collaborative material sample catalog for designers, studios, and clients. It powers both web and iOS clients that organize material samples into shared collections, manage member access, and securely view/upload sample images.
 
-This backend exposes a REST API built with TypeScript and Express, uses Clerk for authentication, Prisma for data access, PostgreSQL for persistence, and AWS S3 for object storage. It includes role-based access controls at both the global user level (admin/user/viewer) and per-collection roles (Owner/Editor/Viewer) to enable secure collaboration.
+This backend exposes a REST API built with TypeScript and Express, uses AWS Cognito for authentication, Prisma for data access, PostgreSQL for persistence, and AWS S3 for object storage. It includes role-based access controls at both the global user level (admin/user/viewer/seller) and per-collection roles (Owner/Editor/Viewer) to enable secure collaboration.
 
 
 ## 2. Tech Stack
@@ -20,7 +20,7 @@ This backend exposes a REST API built with TypeScript and Express, uses Clerk fo
   - AWS S3 via AWS SDK v3
   - Pre-signed upload/download flows
 - Authentication
-  - Clerk (JWT verification via `@clerk/backend`)
+  - AWS Cognito (JWT verification + user pool management)
   - Dev mode mock auth helper for local testing
 - Validation & Safety
   - Zod (schemas for params, query, and bodies)
@@ -51,7 +51,7 @@ This backend exposes a REST API built with TypeScript and Express, uses Clerk fo
 │  ├─ errors/                 # HttpError, NotFoundError
 │  ├─ types/                  # Express request/locals augmentation
 │  └─ modules/
-│     ├─ auth/                # Clerk adapter, guards, mock + middleware
+│     ├─ auth/                # Cognito adapter, guards, mock + middleware
 │     ├─ users/               # Users router, service, repository, schemas
 │     ├─ samples/             # Samples router, service, repository, schemas, access
 │     ├─ collections/         # Collections router, service, repository, schemas
@@ -208,7 +208,7 @@ Currently there is no `invites` table or invite tokens. Owners add members direc
 
 All responses are JSON. Successful responses wrap payloads as `{ "data": ... }`. Errors follow `{ "error": { "message": string, ... } }` with appropriate HTTP status.
 
-Authentication: All routes except `/health` require auth. In development, mock auth is active; in production, Clerk middleware verifies JWTs.
+Authentication: All routes except `/health` require auth. In development/test, the mock auth middleware is active; in production, Cognito middleware verifies JWTs issued by the configured User Pool.
 
 ### Health
 - `GET /health`
@@ -243,7 +243,7 @@ Authentication: All routes except `/health` require auth. In development, mock a
   - Response 200: `{ "data": User }`
 
 - `POST /users`
-  - Purpose: Create user entry (sync with Clerk identity)
+  - Purpose: Create user entry (sync with Cognito identity)
   - Auth: Required; body `id` must match authenticated user
   - Body:
     ```json
@@ -373,7 +373,7 @@ Authentication: All routes except `/health` require auth. In development, mock a
   - Response 200: `{ "data": { id, collection, inviter, invitee, role, status, expiresAt } }`
 - `POST /invites/:id/accept`
   - Purpose: Accept invite and join collection (role defaults to view-only unless owner later upgrades)
-  - Auth: Logged-in user (Clerk JWT)
+  - Auth: Logged-in user (Cognito JWT)
   - Body: `{}`
   - Response 200: `{ "data": { collectionId, role, status } }`
 - `POST /invites/:id/reject`
@@ -400,10 +400,10 @@ Authentication: All routes except `/health` require auth. In development, mock a
 
 - Middleware Chain
   - Development: `mockAuthMiddleware` injects a test user; can be tuned via custom headers for roles and locale.
-  - Production: `clerkAuthMiddleware` extracts tokens from `Authorization: Bearer <JWT>` or `__session` cookie and verifies with Clerk’s `verifyToken`.
+- Production: `cognitoAuthMiddleware` extracts tokens from the `Authorization: Bearer <JWT>` header (or other configured sources) and verifies against the Cognito User Pool JWKS.
   - `requireAuth` guard enforces presence of `req.authUser` on protected routes.
 
-- Global Roles (from Clerk metadata)
+- Global Roles (from Cognito group membership)
   - `admin`: Elevated privileges (e.g., broad listing, bypass in some access checks)
   - `user`, `viewer`: Standard accounts
 
@@ -430,7 +430,7 @@ Planned security model for invites:
 - Invitation Creation
   - Owner posts an email and desired role, backend creates an invite row with a one-time token and expiry; optional email delivery via provider.
 - Acceptance / Rejection
-  - Recipient opens tokenized link, authenticates with Clerk, and accepts or rejects. On acceptance, backend creates a `collection_members` row and marks the invite accepted.
+  - Recipient opens tokenized link, authenticates with Cognito, and accepts or rejects. On acceptance, backend creates a `collection_members` row and marks the invite accepted.
 - Expiration & Spam Prevention
   - Expiration enforced at creation (`expiresAt`), rate-limiting at API gateway (already present globally), and optional domain allowlists.
 
@@ -463,8 +463,15 @@ Planned security model for invites:
 | `AWS_SECRET_ACCESS_KEY` | conditional | – | Optional if instance profile/role is used |
 | `CDN_BASE_URL` | no | – | If set, presigned `publicUrl` uses this base |
 | `LOG_LEVEL` | no | `debug` (dev) | `info` (prod) |
-| `CLERK_PUBLISHABLE_KEY` | no | – | Required when Clerk is enabled |
-| `CLERK_SECRET_KEY` | no | – | Required when Clerk is enabled |
+| `COGNITO_REGION` | conditional | inherits `AWS_REGION` | Cognito User Pool region |
+| `COGNITO_USER_POOL_ID` | yes (prod) | – | User Pool identifier |
+| `COGNITO_CLIENT_ID_USER` | yes (prod) | – | App client for end-user flows |
+| `COGNITO_CLIENT_ID_SELLER` | yes (prod) | – | App client for seller flows |
+| `COGNITO_CLIENT_ID_ADMIN` | no | – | Optional admin app client |
+| `COGNITO_JWKS_URI` | no | derived | JWKS endpoint; auto-derived when omitted |
+| `COGNITO_DOMAIN` | no | – | Hosted UI domain (if used) |
+| `COGNITO_SELLER_GROUP` | no | `seller` | Cognito group name for sellers |
+| `COGNITO_USER_GROUP` | no | `user` | Cognito group name for baseline users |
 | `CLEANUP_POLL_INTERVAL_MS` | no | `60000` | Cleanup scheduler interval |
 | `HTTPS_CERT_PATH` | with key | – | Enable HTTPS when paired with key |
 | `HTTPS_KEY_PATH` | with cert | – | Enable HTTPS when paired with cert |

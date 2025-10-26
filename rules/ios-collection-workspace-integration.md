@@ -101,7 +101,7 @@ Authorization: Bearer <JWT>
 
 Successful response mirrors the list payload. Role must be `EDITOR` or `VIEW_ONLY`; attempting to add an existing member returns `409`.
 
-> **Önemli:** Modalda girilen ad, Clerk’te benzersiz kabul edilir ve backend bu adı normalize edip kullanıcıyı arar. İsim bulunamazsa `404` döner, aynı ad iki farklı kullanıcıda varsa (olmamalı) `409` döner. İstemci tarafında ayrıca ID çözümlemesi yapmaya gerek yoktur.
+> **Önemli:** Modalda girilen ad, Cognito kullanıcı bilgilerinden normalize edilerek backend’de aranır. İsim bulunamazsa `404` döner, aynı ad iki farklı kullanıcıda varsa (olmamalı) `409` döner. İstemci tarafında ayrıca ID çözümlemesi yapmaya gerek yoktur.
 
 ### 3.3 Update Member Role
 

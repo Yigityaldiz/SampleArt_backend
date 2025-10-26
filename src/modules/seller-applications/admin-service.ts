@@ -3,6 +3,8 @@ import { HttpError, NotFoundError } from '../../errors';
 import { SellerApplicationRepository } from './repository';
 import { auditLogService } from '../audit';
 import { logger } from '../../lib/logger';
+import { addUserToCognitoGroup, removeUserFromCognitoGroup } from '../../lib/cognito';
+import { env } from '../../config';
 
 export interface SellerApplicationListParams {
   status?: SellerProfileStatus;
@@ -50,6 +52,7 @@ export class SellerApplicationAdminService {
   async approve(id: string, reviewerId: string) {
     const profile = await this.ensureReviewable(id);
     const updated = await this.repository.approve(id, reviewerId);
+    const sellerGroup = env.cognito.sellerGroup;
 
     await auditLogService.log({
       actorId: reviewerId,
@@ -70,6 +73,13 @@ export class SellerApplicationAdminService {
       },
       'Seller application approved',
     );
+
+    if (sellerGroup) {
+      await addUserToCognitoGroup({
+        username: profile.userId,
+        group: sellerGroup,
+      });
+    }
 
     return updated;
   }
@@ -104,6 +114,14 @@ export class SellerApplicationAdminService {
       },
       'Seller application rejected',
     );
+
+    const sellerGroup = env.cognito.sellerGroup;
+    if (sellerGroup) {
+      await removeUserFromCognitoGroup({
+        username: profile.userId,
+        group: sellerGroup,
+      });
+    }
 
     return updated;
   }

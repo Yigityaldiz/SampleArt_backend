@@ -1,6 +1,13 @@
 export { mockAuthMiddleware } from './mock';
-export { clerkAuthMiddleware } from './middleware';
-export { clerkAuthAdapter } from './clerk';
+export { cognitoAuthMiddleware } from './middleware';
+export {
+  cognitoAuthAdapter,
+  signUp,
+  confirmSignUp,
+  signIn,
+  forgotPassword,
+  confirmForgotPassword,
+} from './cognito';
 export { requireAuth, requireRole } from './guards';
 export type { AuthUser, AuthRole, AuthVerifier } from './types';
 export { authRouter } from './router';
