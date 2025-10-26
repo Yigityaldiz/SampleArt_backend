@@ -5,6 +5,8 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config';
@@ -42,6 +44,8 @@ const CONTENT_TYPE_EXTENSION_MAP: Record<string, string> = {
   'image/gif': 'gif',
 };
 
+const PUBLIC_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
 const sanitizeExtension = (extension?: string) => {
   if (!extension) {
     return undefined;
@@ -72,13 +76,35 @@ export const buildObjectKey = (params: { userId: string; extension?: string }) =
   return `samples/${userId}/${randomUUID()}${suffix}`;
 };
 
+export const buildPublicSampleKey = (params: { userId: string; extension?: string }) => {
+  const { userId, extension } = params;
+  const suffix = extension ? `.${extension}` : '';
+  return `public/samples/${userId}/${randomUUID()}${suffix}`;
+};
+
+const normalizeS3Key = (key: string) => key.replace(/^\/+/, '');
+
+const encodeS3Key = (key: string) =>
+  normalizeS3Key(key)
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
 export const publicUrlFor = (key: string) => {
   if (!env.S3_BUCKET) {
     throw new Error('S3 bucket is not configured');
   }
 
+  const normalizedKey = normalizeS3Key(key);
   const base = env.CDN_BASE_URL ?? `https://${env.S3_BUCKET}.s3.${env.AWS_REGION}.amazonaws.com`;
-  return `${base.replace(/\/$/, '')}/${key}`;
+  const trimmedBase = base.replace(/\/$/, '');
+
+  if (!normalizedKey) {
+    return trimmedBase;
+  }
+
+  const encodedKey = encodeS3Key(normalizedKey);
+  return `${trimmedBase}/${encodedKey}`;
 };
 
 const DEFAULT_PRESIGN_EXPIRATION_SECONDS = 900;
@@ -112,6 +138,7 @@ export const createPutObjectPresign = async (params: {
     Bucket: env.S3_BUCKET,
     Key: key,
     ContentType: contentType,
+    CacheControl: PUBLIC_CACHE_CONTROL,
   });
 
   const expiresIn = expiresInSeconds ?? DEFAULT_PRESIGN_EXPIRATION_SECONDS;
@@ -147,6 +174,52 @@ export const createGetObjectPresign = async (params: {
     downloadUrl,
     expiresIn,
   };
+};
+
+export const copyObjectToPublic = async (params: {
+  sourceKey: string;
+  targetKey: string;
+  contentType?: string;
+  deleteSource?: boolean;
+}): Promise<void> => {
+  if (!env.S3_BUCKET) {
+    throw new Error('S3 bucket is not configured');
+  }
+
+  const { sourceKey, targetKey, contentType, deleteSource = false } = params;
+  const normalizedSourceKey = normalizeS3Key(sourceKey);
+  const normalizedTargetKey = normalizeS3Key(targetKey);
+
+  if (normalizedSourceKey === normalizedTargetKey) {
+    return;
+  }
+
+  let resolvedContentType = contentType;
+
+  if (!resolvedContentType) {
+    const head = await s3Client.send(
+      new HeadObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: normalizedSourceKey,
+      }),
+    );
+    resolvedContentType = head.ContentType ?? 'application/octet-stream';
+  }
+
+  const copyCommand = new CopyObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: normalizedTargetKey,
+    CopySource: `${env.S3_BUCKET}/${encodeS3Key(normalizedSourceKey)}`,
+    MetadataDirective: 'REPLACE',
+    CacheControl: PUBLIC_CACHE_CONTROL,
+    ContentType: resolvedContentType,
+  });
+
+  await s3Client.send(copyCommand);
+
+  if (deleteSource) {
+    await deleteS3Objects([normalizedSourceKey]);
+  }
 };
 
 export const deleteS3Objects = async (keys: string[]): Promise<void> => {

@@ -102,6 +102,13 @@ export class SampleRepository {
     });
   }
 
+  updateImageObjectKey(imageId: string, data: { objectKey: string; url?: string }) {
+    return this.db.sampleImage.update({
+      where: { id: imageId },
+      data,
+    });
+  }
+
   hardDelete(id: string) {
     return this.db.sample.delete({
       where: { id },

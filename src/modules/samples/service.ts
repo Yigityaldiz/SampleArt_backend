@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
+import { extname } from 'path';
 import { NotFoundError } from '../../errors';
+import { buildPublicSampleKey, copyObjectToPublic, publicUrlFor } from '../../lib/s3';
 import { SampleRepository } from './repository';
 import { CleanupTaskService } from '../cleanup';
 import type {
@@ -64,11 +66,14 @@ const toImageResponse = (image: SampleWithRelations['image']): SampleImageRespon
     return null;
   }
 
+  const derivedUrl =
+    image.objectKey && image.objectKey.length > 0 ? publicUrlFor(image.objectKey) : image.url;
+
   return {
     id: image.id,
     storageProvider: image.storageProvider,
     objectKey: image.objectKey,
-    url: image.url,
+    url: derivedUrl,
     width: image.width ?? null,
     height: image.height ?? null,
     blurhash: image.blurhash ?? null,
@@ -204,7 +209,8 @@ export class SampleService {
     };
 
     const created = await this.repo.create(data);
-    return toSampleResponse(created);
+    const promoted = await this.promoteSampleImageIfNeeded(created);
+    return toSampleResponse(promoted);
   }
 
   async update(id: string, body: UpdateSampleBody): Promise<SampleResponse> {
@@ -239,7 +245,8 @@ export class SampleService {
     }
 
     const updated = await this.repo.update(id, data);
-    return toSampleResponse(updated);
+    const promoted = await this.promoteSampleImageIfNeeded(updated);
+    return toSampleResponse(promoted);
   }
 
   async softDelete(id: string): Promise<SampleResponse> {
@@ -272,5 +279,51 @@ export class SampleService {
 
   async hardDelete(id: string): Promise<void> {
     await this.repo.hardDelete(id);
+  }
+
+  private async promoteSampleImageIfNeeded(
+    sample: SampleWithRelations,
+  ): Promise<SampleWithRelations> {
+    if (!sample.image || !sample.isPublic) {
+      return sample;
+    }
+
+    const currentKey = sample.image.objectKey;
+    if (!currentKey || currentKey.startsWith('public/')) {
+      return sample;
+    }
+
+    const extension = extname(currentKey).replace(/^\./, '').toLowerCase() || undefined;
+    const targetKey = buildPublicSampleKey({
+      userId: sample.userId,
+      extension,
+    });
+
+    await copyObjectToPublic({
+      sourceKey: currentKey,
+      targetKey,
+      deleteSource: true,
+    });
+
+    const url = publicUrlFor(targetKey);
+
+    await this.repo.updateImageObjectKey(sample.image.id, {
+      objectKey: targetKey,
+      url,
+    });
+
+    const refreshed = await this.repo.findById(sample.id, { includeDeleted: true });
+    if (refreshed) {
+      return refreshed;
+    }
+
+    return {
+      ...sample,
+      image: {
+        ...sample.image,
+        objectKey: targetKey,
+        url,
+      },
+    };
   }
 }

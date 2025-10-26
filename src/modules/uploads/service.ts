@@ -4,10 +4,7 @@ import { createPutObjectPresign, createGetObjectPresign } from '../../lib/s3';
 import { SampleRepository } from '../samples/repository';
 import { CollectionRepository } from '../collections/repository';
 import { ensureSampleAccess } from '../samples/access';
-import type {
-  CreatePresignedDownloadBody,
-  CreatePresignedUploadBody,
-} from './schemas';
+import type { CreatePresignedDownloadBody, CreatePresignedUploadBody } from './schemas';
 
 export interface PresignedUploadResponse {
   key: string;
@@ -75,17 +72,17 @@ export class UploadService {
     }
 
     const key = body.objectKey.trim();
-    const basePrefix = 'samples/';
-    const allowedPrefix = `samples/${userId}/`;
+    const basePrefixes = ['samples/', 'public/samples/'];
+    const allowedPrefixes = [`samples/${userId}/`, `public/samples/${userId}/`];
     const sampleId = body.sampleId.trim();
     const collectionId = body.collectionId?.trim();
     const { allowAllKeys = false } = options;
 
-    if (!key.startsWith(basePrefix)) {
+    if (!basePrefixes.some((prefix) => key.startsWith(prefix))) {
       throw new HttpError(400, 'Invalid object key');
     }
 
-    if (!allowAllKeys && !key.startsWith(allowedPrefix)) {
+    if (!allowAllKeys && !allowedPrefixes.some((prefix) => key.startsWith(prefix))) {
       const sample = await this.sampleRepo.findById(sampleId);
       if (!sample || !sample.image || sample.image.objectKey !== key) {
         throw new HttpError(404, 'Sample image not found for provided object key');
