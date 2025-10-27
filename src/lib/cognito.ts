@@ -3,7 +3,6 @@ import {
   AdminRemoveUserFromGroupCommand,
   CognitoIdentityProvider,
 } from '@aws-sdk/client-cognito-identity-provider';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { env } from '../config';
 import { logger } from './logger';
 
@@ -23,10 +22,35 @@ export const cognito = new CognitoIdentityProvider(
     : {},
 );
 
-const jwks = jwksUri ? createRemoteJWKSet(new URL(jwksUri)) : null;
-
 const issuer =
   region && userPoolId ? `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` : null;
+
+type JoseModule = typeof import('jose');
+type RemoteJWKSet = ReturnType<JoseModule['createRemoteJWKSet']>;
+
+let joseModulePromise: Promise<JoseModule> | null = null;
+let jwks: RemoteJWKSet | null = null;
+
+const loadJose = async (): Promise<JoseModule> => {
+  if (!joseModulePromise) {
+    joseModulePromise = import('jose');
+  }
+
+  return joseModulePromise;
+};
+
+const getJwks = async (): Promise<RemoteJWKSet | null> => {
+  if (!jwksUri) {
+    return null;
+  }
+
+  if (!jwks) {
+    const { createRemoteJWKSet } = await loadJose();
+    jwks = createRemoteJWKSet(new URL(jwksUri));
+  }
+
+  return jwks;
+};
 
 interface VerifyTokenOptions {
   requireTokenUse?: Array<'id' | 'access'>;
@@ -47,7 +71,9 @@ export const verifyCognitoToken = async <TPayload extends CognitoTokenPayload = 
   token: string,
   options: VerifyTokenOptions = {},
 ): Promise<TPayload | null> => {
-  if (!jwks || !issuer) {
+  const remoteJwks = await getJwks();
+
+  if (!remoteJwks || !issuer) {
     logger.warn('Cognito JWKS configuration missing; skipping token verification.');
     return null;
   }
@@ -55,7 +81,8 @@ export const verifyCognitoToken = async <TPayload extends CognitoTokenPayload = 
   const { requireTokenUse, audience } = options;
 
   try {
-    const { payload } = await jwtVerify(token, jwks, {
+    const { jwtVerify } = await loadJose();
+    const { payload } = await jwtVerify(token, remoteJwks, {
       issuer,
       audience,
     });
