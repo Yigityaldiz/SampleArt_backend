@@ -31,9 +31,11 @@ type RemoteJWKSet = ReturnType<JoseModule['createRemoteJWKSet']>;
 let joseModulePromise: Promise<JoseModule> | null = null;
 let jwks: RemoteJWKSet | null = null;
 
+const dynamicImport = new Function('specifier', 'return import(specifier);') as <T>(specifier: string) => Promise<T>;
+
 const loadJose = async (): Promise<JoseModule> => {
   if (!joseModulePromise) {
-    joseModulePromise = import('jose');
+    joseModulePromise = dynamicImport<JoseModule>('jose');
   }
 
   return joseModulePromise;
